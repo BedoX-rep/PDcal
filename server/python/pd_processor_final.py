@@ -11,7 +11,7 @@ import os
 from pupil_apriltags import Detector
 
 def detect_pupil_in_eye_region(eye_region, debug_name="eye"):
-    """Detect precise pupil center within an eye region using multiple methods"""
+    """Detect precise pupil center within an eye region using advanced multi-method approach"""
     
     if eye_region.size == 0:
         return None
@@ -19,31 +19,89 @@ def detect_pupil_in_eye_region(eye_region, debug_name="eye"):
     h, w = eye_region.shape
     center_x, center_y = w // 2, h // 2
     
-    # Method 1: Find darkest region (pupil)
-    blurred = cv2.GaussianBlur(eye_region, (5, 5), 0)
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
+    # Preprocessing: Enhance contrast and reduce noise
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4,4))
+    enhanced = clahe.apply(eye_region)
+    
+    # Apply bilateral filter to preserve edges while reducing noise
+    denoised = cv2.bilateralFilter(enhanced, 9, 75, 75)
+    
+    # Method 1: Advanced darkest region detection with local minima
+    blurred = cv2.GaussianBlur(denoised, (3, 3), 0)
+    
+    # Find local minima using morphological operations
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    local_min = cv2.morphologyEx(blurred, cv2.MORPH_ERODE, kernel)
+    
+    # Find the darkest points
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(local_min)
     darkest_point = min_loc
     
-    # Method 2: HoughCircles for circular pupil detection
-    circles = cv2.HoughCircles(eye_region, cv2.HOUGH_GRADIENT, 1, 10,
-                              param1=50, param2=15, minRadius=2, maxRadius=min(w, h)//3)
+    # Method 2: Enhanced HoughCircles with multiple parameter sets
+    circles_candidates = []
+    
+    # Try multiple parameter combinations for better detection
+    param_sets = [
+        (50, 15, 2, min(w, h)//4),
+        (40, 12, 3, min(w, h)//3),
+        (60, 18, 2, min(w, h)//5),
+        (30, 10, 1, min(w, h)//3)
+    ]
+    
+    for param1, param2, min_r, max_r in param_sets:
+        circles = cv2.HoughCircles(denoised, cv2.HOUGH_GRADIENT, 1, 8,
+                                  param1=param1, param2=param2, 
+                                  minRadius=min_r, maxRadius=max_r)
+        if circles is not None:
+            circles_candidates.extend(np.round(circles[0, :]).astype("int"))
     
     best_pupil = darkest_point
     best_score = 0
     
-    if circles is not None:
-        circles = np.round(circles[0, :]).astype("int")
-        for (x, y, r) in circles:
-            # Score based on darkness and centrality
-            if 0 <= x < w and 0 <= y < h:
-                darkness_score = 255 - eye_region[y, x]  # Darker is higher score
-                center_distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
-                centrality_score = max(0, min(w, h) // 2 - center_distance)
-                total_score = darkness_score + centrality_score * 2
+    # Enhanced circle evaluation with iris boundary detection
+    for (x, y, r) in circles_candidates:
+        if 0 <= x < w and 0 <= y < h:
+            # Advanced scoring system
+            darkness_score = 255 - denoised[y, x]
+            center_distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+            centrality_score = max(0, min(w, h) // 2 - center_distance)
+            
+            # Check for iris boundary (circular gradient around pupil)
+            iris_score = 0
+            if r > 2:
+                # Sample points around the detected circle
+                angles = np.linspace(0, 2*np.pi, 16)
+                gradient_sum = 0
+                valid_points = 0
                 
-                if total_score > best_score:
-                    best_score = total_score
-                    best_pupil = (x, y)
+                for angle in angles:
+                    # Inner point (pupil)
+                    inner_x = int(x + (r-1) * np.cos(angle))
+                    inner_y = int(y + (r-1) * np.sin(angle))
+                    # Outer point (iris)
+                    outer_x = int(x + (r+2) * np.cos(angle))
+                    outer_y = int(y + (r+2) * np.sin(angle))
+                    
+                    if (0 <= inner_x < w and 0 <= inner_y < h and 
+                        0 <= outer_x < w and 0 <= outer_y < h):
+                        inner_val = denoised[inner_y, inner_x]
+                        outer_val = denoised[outer_y, outer_x]
+                        gradient_sum += max(0, outer_val - inner_val)
+                        valid_points += 1
+                
+                if valid_points > 0:
+                    iris_score = gradient_sum / valid_points
+            
+            # Size appropriateness score
+            ideal_radius = min(w, h) * 0.15  # Pupil should be ~15% of eye region
+            size_score = max(0, 20 - abs(r - ideal_radius))
+            
+            total_score = (darkness_score * 1.5 + centrality_score * 2.0 + 
+                          iris_score * 0.8 + size_score * 0.5)
+            
+            if total_score > best_score:
+                best_score = total_score
+                best_pupil = (x, y)
     
     # Method 3: Contour-based pupil detection with adaptive thresholding
     _, thresh = cv2.threshold(eye_region, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -106,36 +164,102 @@ def detect_pupil_in_eye_region(eye_region, debug_name="eye"):
                         best_score = total_score
                         best_pupil = (cx, cy)
     
-    # Method 5: Gradient-based edge detection for pupil boundary
-    sobelx = cv2.Sobel(eye_region, cv2.CV_64F, 1, 0, ksize=3)
-    sobely = cv2.Sobel(eye_region, cv2.CV_64F, 0, 1, ksize=3)
-    gradient_magnitude = np.sqrt(sobelx**2 + sobely**2)
+    # Method 5: Ellipse fitting for more accurate pupil shape detection
+    # Find contours of dark regions
+    _, binary_ellipse = cv2.threshold(denoised, np.mean(denoised) - np.std(denoised), 255, cv2.THRESH_BINARY_INV)
+    contours_ellipse, _ = cv2.findContours(binary_ellipse, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # Find strong edges that might be pupil boundaries
-    strong_edges = gradient_magnitude > np.mean(gradient_magnitude) + np.std(gradient_magnitude)
-    
-    if np.any(strong_edges):
-        # Find the most central strong edge point
-        y_coords, x_coords = np.where(strong_edges)
-        if len(x_coords) > 0:
-            # Weight by distance from center and edge strength
-            distances = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
-            weights = gradient_magnitude[y_coords, x_coords] / (distances + 1)
-            
-            best_idx = np.argmax(weights)
-            edge_pupil = (x_coords[best_idx], y_coords[best_idx])
-            
-            # Score this edge-based detection
-            if 0 <= edge_pupil[0] < w and 0 <= edge_pupil[1] < h:
-                darkness_score = 255 - eye_region[edge_pupil[1], edge_pupil[0]]
-                center_distance = np.sqrt((edge_pupil[0] - center_x)**2 + (edge_pupil[1] - center_y)**2)
-                centrality_score = max(0, min(w, h) // 2 - center_distance)
-                edge_score = weights[best_idx] * 10  # Bonus for strong edges
-                total_score = darkness_score + centrality_score * 2 + edge_score
+    for contour in contours_ellipse:
+        if len(contour) >= 5:  # Need at least 5 points to fit an ellipse
+            try:
+                ellipse = cv2.fitEllipse(contour)
+                center_ellipse = (int(ellipse[0][0]), int(ellipse[0][1]))
                 
-                if total_score > best_score:
-                    best_score = total_score
-                    best_pupil = edge_pupil
+                # Check if ellipse center is within bounds
+                if (0 <= center_ellipse[0] < w and 0 <= center_ellipse[1] < h):
+                    # Score ellipse based on shape and position
+                    axis_ratio = min(ellipse[1]) / max(ellipse[1])  # Aspect ratio
+                    area_ellipse = cv2.contourArea(contour)
+                    
+                    if (0.6 < axis_ratio < 1.4 and  # Nearly circular
+                        10 < area_ellipse < w * h * 0.4):  # Reasonable size
+                        
+                        darkness_score = 255 - denoised[center_ellipse[1], center_ellipse[0]]
+                        center_distance = np.sqrt((center_ellipse[0] - center_x)**2 + (center_ellipse[1] - center_y)**2)
+                        centrality_score = max(0, min(w, h) // 2 - center_distance)
+                        shape_score = axis_ratio * 30  # Bonus for circular shape
+                        
+                        total_score = darkness_score + centrality_score * 2 + shape_score
+                        
+                        if total_score > best_score:
+                            best_score = total_score
+                            best_pupil = center_ellipse
+            except:
+                continue
+    
+    # Method 6: Template matching with pupil patterns
+    pupil_templates = []
+    
+    # Create circular templates of different sizes
+    for radius in range(2, min(w, h)//3):
+        template = np.zeros((radius*2+1, radius*2+1), dtype=np.uint8)
+        cv2.circle(template, (radius, radius), radius, 255, -1)
+        # Add slight gaussian blur to template
+        template = cv2.GaussianBlur(template, (3, 3), 0)
+        pupil_templates.append((template, radius))
+    
+    for template, radius in pupil_templates:
+        if template.shape[0] <= h and template.shape[1] <= w:
+            # Match template (looking for dark circular regions)
+            result = cv2.matchTemplate(255 - denoised, template, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            
+            if max_val > 0.5:  # Good match threshold
+                template_center = (max_loc[0] + radius, max_loc[1] + radius)
+                
+                if (0 <= template_center[0] < w and 0 <= template_center[1] < h):
+                    darkness_score = 255 - denoised[template_center[1], template_center[0]]
+                    center_distance = np.sqrt((template_center[0] - center_x)**2 + (template_center[1] - center_y)**2)
+                    centrality_score = max(0, min(w, h) // 2 - center_distance)
+                    template_score = max_val * 50  # Template match quality
+                    
+                    total_score = darkness_score + centrality_score * 2 + template_score
+                    
+                    if total_score > best_score:
+                        best_score = total_score
+                        best_pupil = template_center
+    
+    # Method 7: Enhanced gradient-based edge detection with Canny
+    edges = cv2.Canny(denoised, 30, 100)
+    
+    # Find contours of edge-detected regions
+    edge_contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    for contour in edge_contours:
+        area = cv2.contourArea(contour)
+        if 5 < area < w * h * 0.3:
+            M = cv2.moments(contour)
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                
+                if 0 <= cx < w and 0 <= cy < h:
+                    # Check if this contour forms a reasonable circle
+                    perimeter = cv2.arcLength(contour, True)
+                    if perimeter > 0:
+                        circularity = 4 * np.pi * area / (perimeter * perimeter)
+                        
+                        if circularity > 0.3:  # Reasonable circularity
+                            darkness_score = 255 - denoised[cy, cx]
+                            center_distance = np.sqrt((cx - center_x)**2 + (cy - center_y)**2)
+                            centrality_score = max(0, min(w, h) // 2 - center_distance)
+                            edge_score = circularity * 40
+                            
+                            total_score = darkness_score + centrality_score * 2 + edge_score
+                            
+                            if total_score > best_score:
+                                best_score = total_score
+                                best_pupil = (cx, cy)
     
     return best_pupil
 
@@ -330,24 +454,43 @@ def detect_face_landmarks(image):
     left_eye_region = eye_candidates[0]
     right_eye_region = eye_candidates[1]
     
-    # Extract eye regions and detect pupils
+    # Extract and preprocess eye regions for better pupil detection
     lex, ley, lew, leh = left_eye_region
     rex, rey, rew, reh = right_eye_region
     
-    # Ensure regions are within bounds
-    lex = max(0, lex)
-    ley = max(0, ley)
-    lew = min(lew, fw - lex)
-    leh = min(leh, fh - ley)
+    # Expand eye regions slightly for better context
+    expansion = 5
+    lex = max(0, lex - expansion)
+    ley = max(0, ley - expansion)
+    lew = min(lew + 2*expansion, fw - lex)
+    leh = min(leh + 2*expansion, fh - ley)
     
-    rex = max(0, rex)
-    rey = max(0, rey)
-    rew = min(rew, fw - rex)
-    reh = min(reh, fh - rey)
+    rex = max(0, rex - expansion)
+    rey = max(0, rey - expansion)
+    rew = min(rew + 2*expansion, fw - rex)
+    reh = min(reh + 2*expansion, fh - rey)
     
     if lew > 0 and leh > 0:
         left_eye_img = face_gray[ley:ley+leh, lex:lex+lew]
+        
+        # Apply multiple attempts with different preprocessing
+        left_pupil_local = None
+        
+        # Attempt 1: Standard detection
         left_pupil_local = detect_pupil_in_eye_region(left_eye_img, "left")
+        
+        # Attempt 2: If failed, try with histogram equalization
+        if left_pupil_local is None:
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
+            enhanced_left = clahe.apply(left_eye_img)
+            left_pupil_local = detect_pupil_in_eye_region(enhanced_left, "left_enhanced")
+        
+        # Attempt 3: If still failed, try with gamma correction
+        if left_pupil_local is None:
+            gamma_corrected = np.power(left_eye_img / 255.0, 0.7) * 255
+            gamma_corrected = gamma_corrected.astype(np.uint8)
+            left_pupil_local = detect_pupil_in_eye_region(gamma_corrected, "left_gamma")
+        
         if left_pupil_local:
             left_pupil = (fx + lex + left_pupil_local[0], fy + ley + left_pupil_local[1])
         else:
@@ -357,7 +500,25 @@ def detect_face_landmarks(image):
     
     if rew > 0 and reh > 0:
         right_eye_img = face_gray[rey:rey+reh, rex:rex+rew]
+        
+        # Apply multiple attempts with different preprocessing
+        right_pupil_local = None
+        
+        # Attempt 1: Standard detection
         right_pupil_local = detect_pupil_in_eye_region(right_eye_img, "right")
+        
+        # Attempt 2: If failed, try with histogram equalization
+        if right_pupil_local is None:
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
+            enhanced_right = clahe.apply(right_eye_img)
+            right_pupil_local = detect_pupil_in_eye_region(enhanced_right, "right_enhanced")
+        
+        # Attempt 3: If still failed, try with gamma correction
+        if right_pupil_local is None:
+            gamma_corrected = np.power(right_eye_img / 255.0, 0.7) * 255
+            gamma_corrected = gamma_corrected.astype(np.uint8)
+            right_pupil_local = detect_pupil_in_eye_region(gamma_corrected, "right_gamma")
+        
         if right_pupil_local:
             right_pupil = (fx + rex + right_pupil_local[0], fy + rey + right_pupil_local[1])
         else:
