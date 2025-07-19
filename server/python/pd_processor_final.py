@@ -8,335 +8,116 @@ import numpy as np
 import json
 import sys
 import os
+import mediapipe as mp
 from pupil_apriltags import Detector
 
-def detect_pupil_in_eye_region(eye_region, debug_name="eye"):
-    """Simple and reliable pupil detection using darkest region approach"""
-    
-    if eye_region.size == 0:
-        return None
-    
-    h, w = eye_region.shape
-    
-    # Simple preprocessing: just enhance contrast
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
-    enhanced = clahe.apply(eye_region)
-    
-    # Slight blur to reduce noise
-    blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
-    
-    # Find the darkest point in the eye region
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
-    
-    # The pupil should be the darkest point
-    pupil_x, pupil_y = min_loc
-    
-    # Validate the position is reasonable (not at edges)
-    margin = 3
-    if (margin <= pupil_x <= w - margin and 
-        margin <= pupil_y <= h - margin):
-        return (pupil_x, pupil_y)
-    
-    # If at edge, use center as fallback
-    return (w // 2, h // 2)
-
 def detect_face_landmarks(image):
-    """Enhanced face and pupil detection using multiple computer vision techniques"""
+    """Detect face landmarks and pupils using MediaPipe Face Mesh"""
     
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    h, w = gray.shape
+    # Convert BGR to RGB for MediaPipe
+    rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    h, w = rgb_image.shape[:2]
     
-    # Step 1: Robust face detection with multiple cascades
-    face_cascades = [
-        cv2.data.haarcascades + 'haarcascade_frontalface_default.xml',
-        cv2.data.haarcascades + 'haarcascade_frontalface_alt.xml',
-        cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
-    ]
+    # Initialize MediaPipe Face Mesh
+    mp_face_mesh = mp.solutions.face_mesh
     
-    faces = []
-    for cascade_file in face_cascades:
-        try:
-            face_cascade = cv2.CascadeClassifier(cascade_file)
-            for scale_factor in [1.05, 1.1, 1.2]:
-                for min_neighbors in [3, 4, 5]:
-                    detected = face_cascade.detectMultiScale(gray, scale_factor, min_neighbors, 
-                                                           minSize=(50, 50), maxSize=(w, h))
-                    if len(detected) > 0:
-                        faces.extend(detected)
-                        break
-                if len(faces) > 0:
-                    break
-        except:
-            continue
-        if len(faces) > 0:
-            break
+    print("Using MediaPipe for pupil detection...", file=sys.stderr)
     
-    # If no face detected, use profile or assume central region
-    if len(faces) == 0:
-        try:
-            profile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_profileface.xml')
-            profiles = profile_cascade.detectMultiScale(gray, 1.1, 4, minSize=(50, 50))
-            if len(profiles) > 0:
-                faces = profiles
-        except:
-            pass
-    
-    # Fallback to central face region
-    if len(faces) == 0:
-        face_w = int(w * 0.6)
-        face_h = int(h * 0.8)
-        face_x = (w - face_w) // 2
-        face_y = int(h * 0.1)
-        faces = [(face_x, face_y, face_w, face_h)]
-    
-    # Use the largest, most central face
-    best_face = max(faces, key=lambda f: f[2] * f[3])
-    fx, fy, fw, fh = best_face
-    
-    face_gray = gray[fy:fy+fh, fx:fx+fw]
-    
-    # Step 2: Enhanced eye region detection
-    eye_candidates = []
-    
-    # Method 1: Multiple eye cascade classifiers
-    eye_cascades = [
-        cv2.data.haarcascades + 'haarcascade_eye.xml',
-        cv2.data.haarcascades + 'haarcascade_eye_tree_eyeglasses.xml',
-        cv2.data.haarcascades + 'haarcascade_lefteye_2splits.xml',
-        cv2.data.haarcascades + 'haarcascade_righteye_2splits.xml'
-    ]
-    
-    for cascade_file in eye_cascades:
-        try:
-            eye_cascade = cv2.CascadeClassifier(cascade_file)
-            for scale in [1.05, 1.1, 1.15]:
-                for neighbors in [3, 4, 5]:
-                    eyes = eye_cascade.detectMultiScale(face_gray, scale, neighbors, 
-                                                       minSize=(10, 10), maxSize=(fw//3, fh//3))
-                    if len(eyes) >= 2:
-                        eye_candidates.extend(eyes)
-                        break
-                if len(eye_candidates) >= 2:
-                    break
-        except:
-            continue
-        if len(eye_candidates) >= 2:
-            break
-    
-    # Method 2: Template matching for eye patterns
-    if len(eye_candidates) < 2:
-        # Create simple eye templates
-        eye_template = np.zeros((20, 30), dtype=np.uint8)
-        cv2.ellipse(eye_template, (15, 10), (12, 6), 0, 0, 360, 255, -1)
-        cv2.ellipse(eye_template, (15, 10), (4, 4), 0, 0, 360, 0, -1)  # Pupil
+    with mp_face_mesh.FaceMesh(
+        static_image_mode=True,
+        max_num_faces=1,
+        refine_landmarks=True,
+        min_detection_confidence=0.5
+    ) as face_mesh:
         
-        result = cv2.matchTemplate(face_gray, eye_template, cv2.TM_CCOEFF_NORMED)
-        locations = np.where(result >= 0.3)
+        results = face_mesh.process(rgb_image)
         
-        for pt in zip(*locations[::-1]):
-            eye_candidates.append((pt[0], pt[1], 30, 20))
-    
-    # Method 3: Advanced HoughCircles with preprocessing
-    if len(eye_candidates) < 2:
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-        enhanced = clahe.apply(face_gray)
-        
-        # Multiple HoughCircles parameters
-        for dp in [1, 2]:
-            for min_dist in [15, 20, 30]:
-                for param1 in [50, 100]:
-                    for param2 in [15, 20, 25]:
-                        circles = cv2.HoughCircles(enhanced, cv2.HOUGH_GRADIENT, dp, min_dist,
-                                                 param1=param1, param2=param2, 
-                                                 minRadius=3, maxRadius=20)
-                        
-                        if circles is not None:
-                            circles = np.round(circles[0, :]).astype("int")
-                            for (x, y, r) in circles:
-                                if y < fh * 0.7:  # Upper portion of face
-                                    eye_candidates.append((x-r, y-r, r*2, r*2))
-                        
-                        if len(eye_candidates) >= 2:
-                            break
-                    if len(eye_candidates) >= 2:
-                        break
-                if len(eye_candidates) >= 2:
-                    break
-            if len(eye_candidates) >= 2:
-                break
-    
-    # Step 3: Filter and select best eye candidates
-    if len(eye_candidates) >= 2:
-        # Filter by position (should be in upper half of face, horizontally separated)
-        valid_eyes = []
-        for (ex, ey, ew, eh) in eye_candidates:
-            if (ey + eh/2) < fh * 0.65 and ew > 5 and eh > 5:  # Upper face region
-                valid_eyes.append((ex, ey, ew, eh))
-        
-        if len(valid_eyes) >= 2:
-            # Sort by horizontal position and take leftmost and rightmost
-            valid_eyes.sort(key=lambda e: e[0])
+        if not results.multi_face_landmarks:
+            print("No face detected by MediaPipe, using fallback method", file=sys.stderr)
+            # Fallback to center estimation
+            face_center_x = w // 2
+            eye_y = int(h * 0.4)  # Eyes typically at 40% down from top
+            eye_separation = int(w * 0.12)  # Approximate eye separation
             
-            # Remove eyes that are too close to each other
-            filtered_eyes = []
-            for eye in valid_eyes:
-                too_close = False
-                for existing in filtered_eyes:
-                    distance = abs(eye[0] - existing[0])
-                    if distance < fw * 0.15:  # Too close horizontally
-                        too_close = True
-                        break
-                if not too_close:
-                    filtered_eyes.append(eye)
+            left_pupil = (face_center_x - eye_separation, eye_y)
+            right_pupil = (face_center_x + eye_separation, eye_y)
+            return left_pupil, right_pupil
+        
+        # Get the first (and likely only) face
+        face_landmarks = results.multi_face_landmarks[0]
+        
+        # MediaPipe landmark indices for eye centers
+        # Left eye center landmarks (viewer's left)
+        LEFT_EYE_INDICES = [468, 469, 470, 471, 472]  # Left iris landmarks
+        # Right eye center landmarks (viewer's right)  
+        RIGHT_EYE_INDICES = [473, 474, 475, 476, 477]  # Right iris landmarks
+        
+        # Calculate pupil centers using iris landmarks
+        def get_pupil_center(eye_indices, landmarks, image_width, image_height):
+            eye_points = []
+            for idx in eye_indices:
+                if idx < len(landmarks.landmark):
+                    landmark = landmarks.landmark[idx]
+                    x = int(landmark.x * image_width)
+                    y = int(landmark.y * image_height)
+                    eye_points.append((x, y))
             
-            if len(filtered_eyes) >= 2:
-                eye_candidates = [filtered_eyes[0], filtered_eyes[-1]]  # Leftmost and rightmost
-            else:
-                eye_candidates = valid_eyes[:2]
-        else:
-            eye_candidates = eye_candidates[:2]
-    
-    # Step 4: Fallback to proportional estimation if needed
-    if len(eye_candidates) < 2:
-        eye_y = int(fh * 0.37)  # Eyes are typically at 37% down from top of face
-        eye_separation = int(fw * 0.25)  # Eyes are about 25% of face width apart
-        face_center_x = fw // 2
+            if eye_points:
+                # Calculate centroid of iris landmarks
+                avg_x = sum(p[0] for p in eye_points) / len(eye_points)
+                avg_y = sum(p[1] for p in eye_points) / len(eye_points)
+                return (int(avg_x), int(avg_y))
+            return None
         
-        left_eye_x = face_center_x - eye_separation
-        right_eye_x = face_center_x + eye_separation
+        # Get pupil centers
+        left_pupil = get_pupil_center(LEFT_EYE_INDICES, face_landmarks, w, h)
+        right_pupil = get_pupil_center(RIGHT_EYE_INDICES, face_landmarks, w, h)
         
-        eye_size = int(fw * 0.08)
+        # Fallback to eye corner landmarks if iris detection fails
+        if left_pupil is None or right_pupil is None:
+            print("Iris landmarks not available, using eye corner landmarks", file=sys.stderr)
+            
+            # Eye corner landmarks
+            LEFT_EYE_CORNERS = [33, 7, 163, 144, 145, 153, 154, 155, 133]  # Left eye outline
+            RIGHT_EYE_CORNERS = [362, 382, 381, 380, 374, 373, 390, 249, 263]  # Right eye outline
+            
+            left_pupil = get_pupil_center(LEFT_EYE_CORNERS, face_landmarks, w, h)
+            right_pupil = get_pupil_center(RIGHT_EYE_CORNERS, face_landmarks, w, h)
         
-        eye_candidates = [
-            (left_eye_x - eye_size//2, eye_y - eye_size//2, eye_size, eye_size),
-            (right_eye_x - eye_size//2, eye_y - eye_size//2, eye_size, eye_size)
-        ]
-    
-    # Ensure we have exactly 2 eyes, sorted left to right
-    if len(eye_candidates) > 2:
-        eye_candidates = sorted(eye_candidates, key=lambda e: e[0])
-        eye_candidates = [eye_candidates[0], eye_candidates[-1]]
-    elif len(eye_candidates) == 1:
-        # Duplicate the eye and offset for left/right
-        ex, ey, ew, eh = eye_candidates[0]
-        offset = int(fw * 0.2)
-        eye_candidates = [
-            (ex - offset, ey, ew, eh),
-            (ex + offset, ey, ew, eh)
-        ]
-    
-    eye_candidates = sorted(eye_candidates, key=lambda e: e[0])  # Sort left to right
-    
-    # Step 5: Precise pupil detection within each eye region
-    left_eye_region = eye_candidates[0]
-    right_eye_region = eye_candidates[1]
-    
-    # Validate eye regions are reasonable
-    left_eye_region = (max(0, left_eye_region[0]), max(0, left_eye_region[1]), 
-                      min(left_eye_region[2], fw), min(left_eye_region[3], fh))
-    right_eye_region = (max(0, right_eye_region[0]), max(0, right_eye_region[1]), 
-                       min(right_eye_region[2], fw), min(right_eye_region[3], fh))
-    
-    # Extract and preprocess eye regions for better pupil detection
-    lex, ley, lew, leh = left_eye_region
-    rex, rey, rew, reh = right_eye_region
-    
-    # Expand eye regions slightly for better context
-    expansion = 5
-    lex = max(0, lex - expansion)
-    ley = max(0, ley - expansion)
-    lew = min(lew + 2*expansion, fw - lex)
-    leh = min(leh + 2*expansion, fh - ley)
-    
-    rex = max(0, rex - expansion)
-    rey = max(0, rey - expansion)
-    rew = min(rew + 2*expansion, fw - rex)
-    reh = min(reh + 2*expansion, fh - rey)
-    
-    if lew > 0 and leh > 0:
-        left_eye_img = face_gray[ley:ley+leh, lex:lex+lew]
+        # Final fallback if MediaPipe fails
+        if left_pupil is None or right_pupil is None:
+            print("MediaPipe landmark detection failed, using geometric fallback", file=sys.stderr)
+            face_center_x = w // 2
+            eye_y = int(h * 0.4)
+            eye_separation = int(w * 0.12)
+            
+            left_pupil = (face_center_x - eye_separation, eye_y)
+            right_pupil = (face_center_x + eye_separation, eye_y)
         
-        # Apply multiple attempts with different preprocessing
-        left_pupil_local = None
+        # Ensure pupils are within image bounds
+        left_pupil = (max(0, min(w-1, left_pupil[0])), max(0, min(h-1, left_pupil[1])))
+        right_pupil = (max(0, min(w-1, right_pupil[0])), max(0, min(h-1, right_pupil[1])))
         
-        # Attempt 1: Standard detection
-        left_pupil_local = detect_pupil_in_eye_region(left_eye_img, "left")
+        # Validate pupil distance is reasonable
+        pixel_distance = np.sqrt((right_pupil[0] - left_pupil[0])**2 + (right_pupil[1] - left_pupil[1])**2)
         
-        # Attempt 2: If failed, try with histogram equalization
-        if left_pupil_local is None:
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
-            enhanced_left = clahe.apply(left_eye_img)
-            left_pupil_local = detect_pupil_in_eye_region(enhanced_left, "left_enhanced")
+        # If pupils are too close or too far apart, use proportional estimation
+        if pixel_distance < 20 or pixel_distance > w * 0.8:
+            print("MediaPipe pupil distance seems unreasonable, using proportional fallback", file=sys.stderr)
+            face_center_x = w // 2
+            eye_y = int(h * 0.4)
+            eye_separation = int(w * 0.12)
+            
+            left_pupil = (face_center_x - eye_separation, eye_y)
+            right_pupil = (face_center_x + eye_separation, eye_y)
         
-        # Attempt 3: If still failed, try with gamma correction
-        if left_pupil_local is None:
-            gamma_corrected = np.power(left_eye_img / 255.0, 0.7) * 255
-            gamma_corrected = gamma_corrected.astype(np.uint8)
-            left_pupil_local = detect_pupil_in_eye_region(gamma_corrected, "left_gamma")
+        # Ensure left pupil is to the left of right pupil
+        if left_pupil[0] > right_pupil[0]:
+            print("Swapping left/right pupils for correct orientation", file=sys.stderr)
+            left_pupil, right_pupil = right_pupil, left_pupil
         
-        if left_pupil_local:
-            left_pupil = (fx + lex + left_pupil_local[0], fy + ley + left_pupil_local[1])
-        else:
-            left_pupil = (fx + lex + lew//2, fy + ley + leh//2)
-    else:
-        left_pupil = (fx + lex + lew//2, fy + ley + leh//2)
-    
-    if rew > 0 and reh > 0:
-        right_eye_img = face_gray[rey:rey+reh, rex:rex+rew]
-        
-        # Apply multiple attempts with different preprocessing
-        right_pupil_local = None
-        
-        # Attempt 1: Standard detection
-        right_pupil_local = detect_pupil_in_eye_region(right_eye_img, "right")
-        
-        # Attempt 2: If failed, try with histogram equalization
-        if right_pupil_local is None:
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(4,4))
-            enhanced_right = clahe.apply(right_eye_img)
-            right_pupil_local = detect_pupil_in_eye_region(enhanced_right, "right_enhanced")
-        
-        # Attempt 3: If still failed, try with gamma correction
-        if right_pupil_local is None:
-            gamma_corrected = np.power(right_eye_img / 255.0, 0.7) * 255
-            gamma_corrected = gamma_corrected.astype(np.uint8)
-            right_pupil_local = detect_pupil_in_eye_region(gamma_corrected, "right_gamma")
-        
-        if right_pupil_local:
-            right_pupil = (fx + rex + right_pupil_local[0], fy + rey + right_pupil_local[1])
-        else:
-            right_pupil = (fx + rex + rew//2, fy + rey + reh//2)
-    else:
-        right_pupil = (fx + rex + rew//2, fy + rey + reh//2)
-    
-    # Final validation and refinement of pupil positions
-    h, w = gray.shape
-    
-    # Ensure pupils are within image bounds
-    left_pupil = (max(0, min(w-1, left_pupil[0])), max(0, min(h-1, left_pupil[1])))
-    right_pupil = (max(0, min(w-1, right_pupil[0])), max(0, min(h-1, right_pupil[1])))
-    
-    # Validate pupil distance is reasonable (should be between 45-85mm in most adults)
-    pixel_distance = np.sqrt((right_pupil[0] - left_pupil[0])**2 + (right_pupil[1] - left_pupil[1])**2)
-    
-    # If pupils are too close or too far apart, use proportional estimation as fallback
-    if pixel_distance < 20 or pixel_distance > w * 0.8:  # Unreasonable distance
-        print("Pupil distance seems unreasonable, using proportional fallback", file=sys.stderr)
-        
-        # Use face-based proportional estimation
-        face_center_x = fx + fw // 2
-        eye_y = fy + int(fh * 0.37)  # 37% down from top of face
-        eye_separation = int(fw * 0.25)  # 25% of face width
-        
-        left_pupil = (face_center_x - eye_separation, eye_y)
-        right_pupil = (face_center_x + eye_separation, eye_y)
-    
-    # Additional refinement: ensure left pupil is actually to the left of right pupil
-    if left_pupil[0] > right_pupil[0]:
-        print("Swapping left/right pupils for correct orientation", file=sys.stderr)
-        left_pupil, right_pupil = right_pupil, left_pupil
-    
-    return left_pupil, right_pupil
+        print(f"MediaPipe detected pupils - Left: {left_pupil}, Right: {right_pupil}", file=sys.stderr)
+        return left_pupil, right_pupil
 
 def detect_apriltags(image):
     """Detect AprilTags using the proper pupil-apriltags library"""
