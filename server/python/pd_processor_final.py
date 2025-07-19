@@ -1,7 +1,6 @@
-
 #!/usr/bin/env python3
 """
-Final Pupillary Distance Measurement
+Final Pupillary Distance Measurement using proper AprilTag detection
 """
 
 import cv2
@@ -11,15 +10,6 @@ import sys
 import os
 import mediapipe as mp
 from pupil_apriltags import Detector
-
-def detect_glasses_and_lenses(image):
-    """Placeholder function - glasses detection removed"""
-    return {
-        'glasses_detected': False,
-        'confidence': 0.0,
-        'frame_bbox': None,
-        'lens_areas': []
-    }
 
 def detect_face_landmarks(image):
     """Detect face landmarks and pupils using MediaPipe Face Mesh"""
@@ -184,7 +174,7 @@ def detect_apriltags(image):
     return best_tag
 
 def process_image(image_path):
-    """Process image to detect pupils, AprilTag, and glasses, calculate PD"""
+    """Process image to detect pupils and AprilTag, calculate PD"""
     try:
         # Read image
         image = cv2.imread(image_path)
@@ -210,16 +200,12 @@ def process_image(image_path):
                 "success": False,
                 "error": "No AprilTag detected. A valid AprilTag is required for accurate PD measurement. Please ensure an AprilTag is clearly visible in the image.",
                 "apriltag_detected": False,
-                "pupils_detected": False,
-                "glasses_detected": False
+                "pupils_detected": False
             }
         
         print(f"AprilTag detected with confidence: {apriltag.decision_margin}", file=sys.stderr)
         
-        # STEP 2: Skip glasses detection (removed)
-        glasses_info = {'glasses_detected': False, 'confidence': 0.0, 'frame_bbox': None, 'lens_areas': []}
-        
-        # STEP 3: Detect face landmarks and pupils
+        # STEP 2: Only proceed to face detection if AprilTag is found
         print("Detecting face landmarks...", file=sys.stderr)
         left_eye, right_eye = detect_face_landmarks(image)
         
@@ -231,11 +217,10 @@ def process_image(image_path):
                 "success": False,
                 "error": "Could not detect pupils/eyes in the image. Please ensure your face is clearly visible and well-lit.",
                 "pupils_detected": False,
-                "apriltag_detected": True,
-                "glasses_detected": glasses_info['glasses_detected']
+                "apriltag_detected": True
             }
         
-        # STEP 4: Calculate measurements
+        # STEP 3: Calculate measurements
         print("Calculating PD...", file=sys.stderr)
         
         # Get AprilTag corners and calculate size
@@ -252,14 +237,12 @@ def process_image(image_path):
         pixel_distance = np.sqrt((right_eye[0] - left_eye[0])**2 + (right_eye[1] - left_eye[1])**2)
         pd_mm = pixel_distance * pixel_scale_factor
         
-        # STEP 5: Create processed image with accurate overlays
+        # STEP 4: Create processed image with accurate overlays
         processed_image = image.copy()
         
         # Ensure coordinates are integers
         left_eye = (int(left_eye[0]), int(left_eye[1]))
         right_eye = (int(right_eye[0]), int(right_eye[1]))
-        
-        # Glasses detection removed - no overlay needed
         
         # Draw pupil markers with better visibility
         # Draw outer circle (larger, green)
@@ -299,17 +282,8 @@ def process_image(image_path):
                    (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         cv2.putText(processed_image, "Eyes Detected", 
                    (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        # Add glasses detection status
-        if glasses_info['glasses_detected']:
-            cv2.putText(processed_image, "Glasses Detected", 
-                       (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 0, 128), 2)
-        else:
-            cv2.putText(processed_image, "No Glasses", 
-                       (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 128, 128), 2)
-        
         cv2.putText(processed_image, f"Scale: {pixel_scale_factor:.3f}mm/px", 
-                   (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                   (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         # Save processed image
         processed_dir = "server/processed_images"
@@ -344,11 +318,7 @@ def process_image(image_path):
             "apriltag_id": int(apriltag.tag_id),
             "apriltag_confidence": round(apriltag.decision_margin, 1),
             "tag_bbox": {"x": min_x, "y": min_y, "width": max_x - min_x, "height": max_y - min_y},
-            "tag_corners": tag_corners.tolist(),
-            "glasses_detected": glasses_info['glasses_detected'],
-            "glasses_confidence": round(glasses_info['confidence'], 2),
-            "glasses_frame_bbox": glasses_info['frame_bbox'],
-            "lens_areas": glasses_info['lens_areas']
+            "tag_corners": tag_corners.tolist()
         }
         
     except Exception as e:
@@ -356,8 +326,7 @@ def process_image(image_path):
             "success": False,
             "error": f"Processing error: {str(e)}",
             "apriltag_detected": False,
-            "pupils_detected": False,
-            "glasses_detected": False
+            "pupils_detected": False
         }
 
 if __name__ == "__main__":
