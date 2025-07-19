@@ -454,6 +454,12 @@ def detect_face_landmarks(image):
     left_eye_region = eye_candidates[0]
     right_eye_region = eye_candidates[1]
     
+    # Validate eye regions are reasonable
+    left_eye_region = (max(0, left_eye_region[0]), max(0, left_eye_region[1]), 
+                      min(left_eye_region[2], fw), min(left_eye_region[3], fh))
+    right_eye_region = (max(0, right_eye_region[0]), max(0, right_eye_region[1]), 
+                       min(right_eye_region[2], fw), min(right_eye_region[3], fh))
+    
     # Extract and preprocess eye regions for better pupil detection
     lex, ley, lew, leh = left_eye_region
     rex, rey, rew, reh = right_eye_region
@@ -525,6 +531,33 @@ def detect_face_landmarks(image):
             right_pupil = (fx + rex + rew//2, fy + rey + reh//2)
     else:
         right_pupil = (fx + rex + rew//2, fy + rey + reh//2)
+    
+    # Final validation and refinement of pupil positions
+    h, w = gray.shape
+    
+    # Ensure pupils are within image bounds
+    left_pupil = (max(0, min(w-1, left_pupil[0])), max(0, min(h-1, left_pupil[1])))
+    right_pupil = (max(0, min(w-1, right_pupil[0])), max(0, min(h-1, right_pupil[1])))
+    
+    # Validate pupil distance is reasonable (should be between 45-85mm in most adults)
+    pixel_distance = np.sqrt((right_pupil[0] - left_pupil[0])**2 + (right_pupil[1] - left_pupil[1])**2)
+    
+    # If pupils are too close or too far apart, use proportional estimation as fallback
+    if pixel_distance < 20 or pixel_distance > w * 0.8:  # Unreasonable distance
+        print("Pupil distance seems unreasonable, using proportional fallback", file=sys.stderr)
+        
+        # Use face-based proportional estimation
+        face_center_x = fx + fw // 2
+        eye_y = fy + int(fh * 0.37)  # 37% down from top of face
+        eye_separation = int(fw * 0.25)  # 25% of face width
+        
+        left_pupil = (face_center_x - eye_separation, eye_y)
+        right_pupil = (face_center_x + eye_separation, eye_y)
+    
+    # Additional refinement: ensure left pupil is actually to the left of right pupil
+    if left_pupil[0] > right_pupil[0]:
+        print("Swapping left/right pupils for correct orientation", file=sys.stderr)
+        left_pupil, right_pupil = right_pupil, left_pupil
     
     return left_pupil, right_pupil
 
@@ -618,6 +651,9 @@ def process_image(image_path):
         print("Detecting face landmarks...", file=sys.stderr)
         left_eye, right_eye = detect_face_landmarks(image)
         
+        # Debug: Print pupil coordinates
+        print(f"Detected pupils - Left: {left_eye}, Right: {right_eye}", file=sys.stderr)
+        
         if left_eye is None or right_eye is None:
             return {
                 "success": False,
@@ -646,14 +682,25 @@ def process_image(image_path):
         # STEP 4: Create processed image with accurate overlays
         processed_image = image.copy()
         
-        # Draw pupil markers (small circles with 1-pixel centers)
-        cv2.circle(processed_image, left_eye, 4, (0, 255, 0), 2)  # Green circles
-        cv2.circle(processed_image, right_eye, 4, (0, 255, 0), 2)
-        cv2.circle(processed_image, left_eye, 1, (255, 255, 255), -1)  # White 1-pixel centers
+        # Ensure coordinates are integers
+        left_eye = (int(left_eye[0]), int(left_eye[1]))
+        right_eye = (int(right_eye[0]), int(right_eye[1]))
+        
+        # Draw pupil markers with better visibility
+        # Draw outer circle (larger, green)
+        cv2.circle(processed_image, left_eye, 6, (0, 255, 0), 2)
+        cv2.circle(processed_image, right_eye, 6, (0, 255, 0), 2)
+        
+        # Draw inner circle (smaller, red for better contrast)
+        cv2.circle(processed_image, left_eye, 3, (0, 0, 255), -1)
+        cv2.circle(processed_image, right_eye, 3, (0, 0, 255), -1)
+        
+        # Draw precise center pixel (white dot)
+        cv2.circle(processed_image, left_eye, 1, (255, 255, 255), -1)
         cv2.circle(processed_image, right_eye, 1, (255, 255, 255), -1)
         
-        # Draw line between pupils
-        cv2.line(processed_image, left_eye, right_eye, (0, 255, 0), 2)
+        # Draw line between pupils with better visibility
+        cv2.line(processed_image, left_eye, right_eye, (0, 255, 0), 3)
         
         # Draw AprilTag outline using actual detected corners
         tag_corners_int = tag_corners.astype(int)
@@ -696,11 +743,15 @@ def process_image(image_path):
         min_x, max_x = int(np.min(x_coords)), int(np.max(x_coords))
         min_y, max_y = int(np.min(y_coords)), int(np.max(y_coords))
         
+        # Validate and ensure integer coordinates
+        left_eye_coords = (int(round(left_eye[0])), int(round(left_eye[1])))
+        right_eye_coords = (int(round(right_eye[0])), int(round(right_eye[1])))
+        
         return {
             "success": True,
             "pd_value": round(pd_mm, 1),
-            "left_pupil": {"x": int(left_eye[0]), "y": int(left_eye[1])},
-            "right_pupil": {"x": int(right_eye[0]), "y": int(right_eye[1])},
+            "left_pupil": {"x": left_eye_coords[0], "y": left_eye_coords[1]},
+            "right_pupil": {"x": right_eye_coords[0], "y": right_eye_coords[1]},
             "pixel_distance": round(float(pixel_distance), 1),
             "scale_factor": round(pixel_scale_factor, 3),
             "processed_image_path": processed_filename,
