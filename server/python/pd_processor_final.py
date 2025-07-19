@@ -1,7 +1,7 @@
 
 #!/usr/bin/env python3
 """
-Final Pupillary Distance Measurement with Glasses Detection
+Final Pupillary Distance Measurement
 """
 
 import cv2
@@ -11,116 +11,15 @@ import sys
 import os
 import mediapipe as mp
 from pupil_apriltags import Detector
-from glasses_detector import GlassesClassifier
 
 def detect_glasses_and_lenses(image):
-    """Detect glasses frames and lens areas with detailed debugging"""
-    print("=== GLASSES DETECTION DEBUG ===", file=sys.stderr)
-    
-    try:
-        # Initialize the glasses classifier
-        classifier = GlassesClassifier()
-        
-        # Convert BGR to RGB for the classifier
-        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        h, w = rgb_image.shape[:2]
-        
-        print(f"Processing image size: {w}x{h}", file=sys.stderr)
-        
-        # Detect glasses
-        glasses_result = classifier.process_image(rgb_image)
-        
-        print(f"Glasses detection result: {glasses_result}", file=sys.stderr)
-        
-        glasses_detected = False
-        glasses_confidence = 0.0
-        frame_bbox = None
-        lens_areas = []
-        
-        # Parse the glasses detection result
-        if hasattr(glasses_result, 'glasses_presence'):
-            glasses_detected = glasses_result.glasses_presence
-            if hasattr(glasses_result, 'confidence'):
-                glasses_confidence = glasses_result.confidence
-        elif isinstance(glasses_result, dict):
-            glasses_detected = glasses_result.get('glasses_present', False)
-            glasses_confidence = glasses_result.get('confidence', 0.0)
-        elif isinstance(glasses_result, (list, tuple)):
-            glasses_detected = len(glasses_result) > 0
-        else:
-            # If it's just a boolean or number
-            if isinstance(glasses_result, bool):
-                glasses_detected = glasses_result
-            elif isinstance(glasses_result, (int, float)):
-                glasses_detected = glasses_result > 0.5
-                glasses_confidence = float(glasses_result)
-        
-        print(f"Glasses detected: {glasses_detected}, confidence: {glasses_confidence}", file=sys.stderr)
-        
-        # If glasses are detected, estimate frame and lens areas
-        if glasses_detected:
-            print("Estimating glasses frame and lens areas...", file=sys.stderr)
-            
-            # Use face detection to estimate glasses frame position
-            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, 1.1, 4)
-            
-            if len(faces) > 0:
-                # Use the largest face
-                fx, fy, fw, fh = max(faces, key=lambda x: x[2] * x[3])
-                print(f"Face detected at: {fx}, {fy}, {fw}x{fh}", file=sys.stderr)
-                
-                # Estimate glasses frame based on face proportions
-                # Glasses typically cover the eye area (upper 1/3 to middle of face)
-                frame_top = fy + int(fh * 0.25)  # Start at 25% down the face
-                frame_bottom = fy + int(fh * 0.6)  # End at 60% down the face
-                frame_left = fx + int(fw * 0.1)   # 10% in from face edges
-                frame_right = fx + int(fw * 0.9)  # 90% across face width
-                
-                frame_width = frame_right - frame_left
-                frame_height = frame_bottom - frame_top
-                frame_bbox = (frame_left, frame_top, frame_width, frame_height)
-                
-                print(f"Estimated glasses frame: {frame_bbox}", file=sys.stderr)
-                
-                # Estimate lens areas (left and right lenses)
-                lens_width = int(frame_width * 0.35)  # Each lens is ~35% of frame width
-                lens_height = int(frame_height * 0.7)  # Lens height is ~70% of frame height
-                lens_y_offset = int(frame_height * 0.15)  # Center lenses vertically
-                
-                # Left lens
-                left_lens_x = frame_left + int(frame_width * 0.1)
-                left_lens_y = frame_top + lens_y_offset
-                left_lens = (left_lens_x, left_lens_y, lens_width, lens_height)
-                
-                # Right lens
-                right_lens_x = frame_right - lens_width - int(frame_width * 0.1)
-                right_lens_y = frame_top + lens_y_offset
-                right_lens = (right_lens_x, right_lens_y, lens_width, lens_height)
-                
-                lens_areas = [left_lens, right_lens]
-                print(f"Estimated lens areas: Left={left_lens}, Right={right_lens}", file=sys.stderr)
-            
-            else:
-                print("No face detected for glasses frame estimation", file=sys.stderr)
-        
-        return {
-            'glasses_detected': glasses_detected,
-            'confidence': glasses_confidence,
-            'frame_bbox': frame_bbox,
-            'lens_areas': lens_areas
-        }
-        
-    except Exception as e:
-        print(f"Error in glasses detection: {str(e)}", file=sys.stderr)
-        return {
-            'glasses_detected': False,
-            'confidence': 0.0,
-            'frame_bbox': None,
-            'lens_areas': [],
-            'error': str(e)
-        }
+    """Placeholder function - glasses detection removed"""
+    return {
+        'glasses_detected': False,
+        'confidence': 0.0,
+        'frame_bbox': None,
+        'lens_areas': []
+    }
 
 def detect_face_landmarks(image):
     """Detect face landmarks and pupils using MediaPipe Face Mesh"""
@@ -317,9 +216,8 @@ def process_image(image_path):
         
         print(f"AprilTag detected with confidence: {apriltag.decision_margin}", file=sys.stderr)
         
-        # STEP 2: Detect glasses frames and lenses
-        print("Detecting glasses...", file=sys.stderr)
-        glasses_info = detect_glasses_and_lenses(image)
+        # STEP 2: Skip glasses detection (removed)
+        glasses_info = {'glasses_detected': False, 'confidence': 0.0, 'frame_bbox': None, 'lens_areas': []}
         
         # STEP 3: Detect face landmarks and pupils
         print("Detecting face landmarks...", file=sys.stderr)
@@ -361,23 +259,7 @@ def process_image(image_path):
         left_eye = (int(left_eye[0]), int(left_eye[1]))
         right_eye = (int(right_eye[0]), int(right_eye[1]))
         
-        # Draw glasses frame and lenses if detected
-        if glasses_info['glasses_detected'] and glasses_info['frame_bbox']:
-            fx, fy, fw, fh = glasses_info['frame_bbox']
-            
-            # Draw glasses frame outline in purple
-            cv2.rectangle(processed_image, (fx, fy), (fx + fw, fy + fh), (128, 0, 128), 3)
-            
-            # Draw lens areas in cyan
-            for i, (lx, ly, lw, lh) in enumerate(glasses_info['lens_areas']):
-                cv2.rectangle(processed_image, (lx, ly), (lx + lw, ly + lh), (255, 255, 0), 2)
-                lens_label = "L" if i == 0 else "R"
-                cv2.putText(processed_image, f"Lens {lens_label}", 
-                           (lx, ly - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-            
-            # Add glasses detection info
-            cv2.putText(processed_image, f"Glasses: {glasses_info['confidence']:.2f}", 
-                       (fx, fy - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (128, 0, 128), 2)
+        # Glasses detection removed - no overlay needed
         
         # Draw pupil markers with better visibility
         # Draw outer circle (larger, green)
