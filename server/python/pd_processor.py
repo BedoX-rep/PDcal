@@ -16,16 +16,23 @@ def process_image(image_path):
     try:
         # Initialize MediaPipe Face Mesh
         mp_face_mesh = mp.solutions.face_mesh
-        mp_drawing = mp.solutions.drawing_utils
-        mp_drawing_styles = mp.solutions.drawing_styles
         
-        # Initialize AprilTag detector
-        at_detector = Detector(families='tag36h11')
+        # Use specific tag family that works best
+        tag_families = ['tag25h9']  # Use the one that works best for this image
         
         # Read image
         image = cv2.imread(image_path)
         if image is None:
             return {"success": False, "error": "Could not read image file"}
+        
+        # Resize image if too large to prevent memory issues
+        h, w = image.shape[:2]
+        max_size = 1024
+        if max(h, w) > max_size:
+            scale = max_size / max(h, w)
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
         
         # Convert BGR to RGB for MediaPipe
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -76,11 +83,12 @@ def process_image(image_path):
             left_pupil = np.mean(left_eye_points, axis=0).astype(int)
             right_pupil = np.mean(right_eye_points, axis=0).astype(int)
             
-            # Detect AprilTags
+            # Detect AprilTags 
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            tags = at_detector.detect(gray, estimate_tag_pose=False, camera_params=None, tag_size=None)
+            detector = Detector(families='tag25h9')
+            tags = detector.detect(gray, estimate_tag_pose=False, camera_params=None, tag_size=None)
             
-            if not tags:
+            if not tags or tags[0].decision_margin < 30.0:  # Use higher confidence threshold
                 return {
                     "success": False,
                     "error": "No AprilTag detected in the image. Please ensure the AprilTag is visible and well-lit.",

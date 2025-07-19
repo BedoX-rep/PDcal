@@ -91,10 +91,15 @@ export default function Home() {
   };
 
   const downloadAprilTag = () => {
-    // This would typically download a PDF with AprilTag
+    // Create a link to download the AprilTag SVG
+    const link = document.createElement('a');
+    link.href = '/src/assets/apriltag.svg';
+    link.download = 'apriltag_50mm.svg';
+    link.click();
+    
     toast({
       title: "Download Started",
-      description: "AprilTag PDF will be downloaded shortly",
+      description: "AprilTag SVG downloaded. Print at actual size (50mm x 50mm).",
     });
   };
 

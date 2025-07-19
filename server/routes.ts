@@ -34,7 +34,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Call Python script for image processing
       const pythonProcess = spawn('python3', [
-        path.join(process.cwd(), 'server/python/pd_processor.py'),
+        path.join(process.cwd(), 'server/python/pd_processor_simple.py'),
         imagePath
       ]);
 

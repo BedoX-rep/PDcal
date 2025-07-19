@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+  <!-- AprilTag 25h9 ID 0 pattern -->
+  <rect width="200" height="200" fill="white"/>
+  <rect x="10" y="10" width="180" height="180" fill="black"/>
+  <rect x="20" y="20" width="160" height="160" fill="white"/>
+  
+  <!-- Tag pattern for 25h9 family, ID 0 -->
+  <g fill="black">
+    <!-- Row 1 -->
+    <rect x="40" y="40" width="20" height="20"/>
+    <rect x="80" y="40" width="20" height="20"/>
+    <rect x="120" y="40" width="20" height="20"/>
+    <rect x="160" y="40" width="20" height="20"/>
+    
+    <!-- Row 2 -->
+    <rect x="40" y="60" width="20" height="20"/>
+    <rect x="160" y="60" width="20" height="20"/>
+    
+    <!-- Row 3 -->
+    <rect x="40" y="80" width="20" height="20"/>
+    <rect x="80" y="80" width="20" height="20"/>
+    <rect x="100" y="80" width="20" height="20"/>
+    <rect x="160" y="80" width="20" height="20"/>
+    
+    <!-- Row 4 -->
+    <rect x="40" y="100" width="20" height="20"/>
+    <rect x="160" y="100" width="20" height="20"/>
+    
+    <!-- Row 5 -->
+    <rect x="40" y="120" width="20" height="20"/>
+    <rect x="80" y="120" width="20" height="20"/>
+    <rect x="120" y="120" width="20" height="20"/>
+    <rect x="160" y="120" width="20" height="20"/>
+    
+    <!-- Row 6 -->
+    <rect x="40" y="140" width="20" height="20"/>
+    <rect x="160" y="140" width="20" height="20"/>
+    
+    <!-- Row 7 -->
+    <rect x="40" y="160" width="20" height="20"/>
+    <rect x="80" y="160" width="20" height="20"/>
+    <rect x="120" y="160" width="20" height="20"/>
+    <rect x="160" y="160" width="20" height="20"/>
+  </g>
+  
+  <!-- Size reference text -->
+  <text x="100" y="195" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="black">50mm x 50mm</text>
+</svg>
