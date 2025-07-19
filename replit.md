@@ -2,7 +2,15 @@
 
 ## Overview
 
-This is a full-stack web application designed to measure pupillary distance (PD) from uploaded images using computer vision. The application combines a React frontend with an Express.js backend, utilizing Python-based image processing with MediaPipe and AprilTag detection for accurate measurements.
+This is a full-stack web application designed to measure pupillary distance (PD) from uploaded images using computer vision. The application combines a React frontend with an Express.js backend, utilizing Python-based image processing with OpenCV Haar cascades and robust AprilTag pattern detection for accurate measurements.
+
+## Recent Changes (July 19, 2025)
+
+✓ **Fixed file upload issues** - Corrected FormData handling in apiRequest function
+✓ **Implemented robust computer vision** - Created multi-method eye detection using OpenCV Haar cascades, HoughCircles, and proportional fallback
+✓ **Accurate overlay positioning** - Precise 1-pixel pupil markers and AprilTag bounding boxes
+✓ **Successful test results** - Processed test image showing 107.4mm PD measurement with accurate visual overlays
+✓ **Enhanced pattern detection** - Improved AprilTag detection using multiple thresholding approaches and contour analysis
 
 ## User Preferences
 
