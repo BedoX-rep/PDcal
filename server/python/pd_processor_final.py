@@ -1,6 +1,7 @@
+
 #!/usr/bin/env python3
 """
-Final Pupillary Distance Measurement using proper AprilTag detection
+Final Pupillary Distance Measurement using proper AprilTag detection and glasses detection
 """
 
 import cv2
@@ -10,6 +11,108 @@ import sys
 import os
 import mediapipe as mp
 from pupil_apriltags import Detector
+from glasses_detector import GlassesClassifier
+
+def detect_glasses_and_lenses(image):
+    """Detect glasses and return lens regions"""
+    try:
+        # Initialize glasses detector
+        glasses_classifier = GlassesClassifier()
+        
+        # Detect if glasses are present
+        glasses_present = glasses_classifier.process_image(image)
+        
+        if not glasses_present:
+            print("No glasses detected", file=sys.stderr)
+            return None, []
+        
+        print("Glasses detected!", file=sys.stderr)
+        
+        # Convert to grayscale for contour detection
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape
+        
+        # Use edge detection to find frame contours
+        edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+        
+        # Find contours
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # Filter contours that could be lens frames
+        lens_regions = []
+        
+        for contour in contours:
+            # Calculate contour properties
+            area = cv2.contourArea(contour)
+            perimeter = cv2.arcLength(contour, True)
+            
+            if area < 500:  # Too small to be a lens
+                continue
+                
+            if area > w * h * 0.3:  # Too large to be a lens
+                continue
+            
+            # Approximate contour to reduce noise
+            epsilon = 0.02 * perimeter
+            approx = cv2.approxPolyDP(contour, epsilon, True)
+            
+            # Get bounding rectangle
+            x, y, bw, bh = cv2.boundingRect(contour)
+            
+            # Check if it's in the upper part of image (where glasses would be)
+            if y > h * 0.7:  # Too low to be glasses
+                continue
+                
+            # Check aspect ratio (lenses are typically wider than tall)
+            aspect_ratio = bw / bh
+            if aspect_ratio < 0.5 or aspect_ratio > 3.0:
+                continue
+            
+            # Check if contour is roughly elliptical (lens-like)
+            hull = cv2.convexHull(contour)
+            hull_area = cv2.contourArea(hull)
+            solidity = area / hull_area if hull_area > 0 else 0
+            
+            if solidity > 0.6:  # Reasonably solid shape
+                lens_regions.append({
+                    'contour': contour,
+                    'bbox': (x, y, bw, bh),
+                    'center': (x + bw//2, y + bh//2),
+                    'area': area
+                })
+        
+        # Sort lens regions by x-coordinate (left to right)
+        lens_regions.sort(key=lambda x: x['center'][0])
+        
+        # If we have more than 2, keep the 2 largest that are reasonably spaced
+        if len(lens_regions) > 2:
+            # Keep the two largest areas that are spaced apart
+            lens_regions.sort(key=lambda x: x['area'], reverse=True)
+            
+            # Find two lenses that are reasonably spaced apart
+            final_lenses = []
+            for i, lens1 in enumerate(lens_regions):
+                for j, lens2 in enumerate(lens_regions[i+1:], i+1):
+                    x_distance = abs(lens1['center'][0] - lens2['center'][0])
+                    if x_distance > w * 0.1:  # At least 10% of image width apart
+                        final_lenses = [lens1, lens2]
+                        break
+                if final_lenses:
+                    break
+            
+            if final_lenses:
+                lens_regions = final_lenses
+            else:
+                lens_regions = lens_regions[:2]  # Just take the two largest
+        
+        # Sort final lenses left to right
+        lens_regions.sort(key=lambda x: x['center'][0])
+        
+        return True, lens_regions
+        
+    except Exception as e:
+        print(f"Glasses detection error: {e}", file=sys.stderr)
+        return None, []
 
 def detect_face_landmarks(image):
     """Detect face landmarks and pupils using MediaPipe Face Mesh"""
@@ -174,7 +277,7 @@ def detect_apriltags(image):
     return best_tag
 
 def process_image(image_path):
-    """Process image to detect pupils and AprilTag, calculate PD"""
+    """Process image to detect pupils, AprilTag, and glasses, calculate PD"""
     try:
         # Read image
         image = cv2.imread(image_path)
@@ -200,12 +303,17 @@ def process_image(image_path):
                 "success": False,
                 "error": "No AprilTag detected. A valid AprilTag is required for accurate PD measurement. Please ensure an AprilTag is clearly visible in the image.",
                 "apriltag_detected": False,
-                "pupils_detected": False
+                "pupils_detected": False,
+                "glasses_detected": False
             }
         
         print(f"AprilTag detected with confidence: {apriltag.decision_margin}", file=sys.stderr)
         
-        # STEP 2: Only proceed to face detection if AprilTag is found
+        # STEP 2: Detect glasses and lenses
+        print("Detecting glasses...", file=sys.stderr)
+        glasses_detected, lens_regions = detect_glasses_and_lenses(image)
+        
+        # STEP 3: Only proceed to face detection if AprilTag is found
         print("Detecting face landmarks...", file=sys.stderr)
         left_eye, right_eye = detect_face_landmarks(image)
         
@@ -217,10 +325,11 @@ def process_image(image_path):
                 "success": False,
                 "error": "Could not detect pupils/eyes in the image. Please ensure your face is clearly visible and well-lit.",
                 "pupils_detected": False,
-                "apriltag_detected": True
+                "apriltag_detected": True,
+                "glasses_detected": glasses_detected or False
             }
         
-        # STEP 3: Calculate measurements
+        # STEP 4: Calculate measurements
         print("Calculating PD...", file=sys.stderr)
         
         # Get AprilTag corners and calculate size
@@ -237,12 +346,27 @@ def process_image(image_path):
         pixel_distance = np.sqrt((right_eye[0] - left_eye[0])**2 + (right_eye[1] - left_eye[1])**2)
         pd_mm = pixel_distance * pixel_scale_factor
         
-        # STEP 4: Create processed image with accurate overlays
+        # STEP 5: Create processed image with accurate overlays
         processed_image = image.copy()
         
         # Ensure coordinates are integers
         left_eye = (int(left_eye[0]), int(left_eye[1]))
         right_eye = (int(right_eye[0]), int(right_eye[1]))
+        
+        # Draw glasses lenses if detected
+        if glasses_detected and lens_regions:
+            print(f"Drawing {len(lens_regions)} lens regions", file=sys.stderr)
+            for i, lens in enumerate(lens_regions):
+                # Draw lens contour in bright cyan
+                cv2.drawContours(processed_image, [lens['contour']], -1, (255, 255, 0), 3)
+                
+                # Draw bounding box
+                x, y, bw, bh = lens['bbox']
+                cv2.rectangle(processed_image, (x, y), (x + bw, y + bh), (255, 255, 0), 2)
+                
+                # Add lens label
+                cv2.putText(processed_image, f"Lens {i+1}", 
+                           (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
         
         # Draw pupil markers with better visibility
         # Draw outer circle (larger, green)
@@ -276,14 +400,26 @@ def process_image(image_path):
                    (tag_center[0] - 30, tag_center[1] + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         # Add measurement text
+        text_y = 30
         cv2.putText(processed_image, f"PD: {pd_mm:.1f}mm", 
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                   (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        text_y += 40
+        
         cv2.putText(processed_image, "AprilTag Detected", 
-                   (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                   (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        text_y += 30
+        
         cv2.putText(processed_image, "Eyes Detected", 
-                   (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                   (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        text_y += 30
+        
+        if glasses_detected:
+            cv2.putText(processed_image, f"Glasses Detected ({len(lens_regions)} lenses)", 
+                       (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+            text_y += 30
+        
         cv2.putText(processed_image, f"Scale: {pixel_scale_factor:.3f}mm/px", 
-                   (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                   (10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         # Save processed image
         processed_dir = "server/processed_images"
@@ -305,6 +441,18 @@ def process_image(image_path):
         left_eye_coords = (int(round(left_eye[0])), int(round(left_eye[1])))
         right_eye_coords = (int(round(right_eye[0])), int(round(right_eye[1])))
         
+        # Prepare lens information for response
+        lens_info = []
+        if glasses_detected and lens_regions:
+            for i, lens in enumerate(lens_regions):
+                x, y, bw, bh = lens['bbox']
+                lens_info.append({
+                    "id": i + 1,
+                    "bbox": {"x": x, "y": y, "width": bw, "height": bh},
+                    "center": lens['center'],
+                    "area": lens['area']
+                })
+        
         return {
             "success": True,
             "pd_value": round(pd_mm, 1),
@@ -315,6 +463,8 @@ def process_image(image_path):
             "processed_image_path": processed_filename,
             "apriltag_detected": True,
             "pupils_detected": True,
+            "glasses_detected": glasses_detected or False,
+            "lens_regions": lens_info,
             "apriltag_id": int(apriltag.tag_id),
             "apriltag_confidence": round(apriltag.decision_margin, 1),
             "tag_bbox": {"x": min_x, "y": min_y, "width": max_x - min_x, "height": max_y - min_y},
@@ -326,7 +476,8 @@ def process_image(image_path):
             "success": False,
             "error": f"Processing error: {str(e)}",
             "apriltag_detected": False,
-            "pupils_detected": False
+            "pupils_detected": False,
+            "glasses_detected": False
         }
 
 if __name__ == "__main__":
