@@ -9,8 +9,9 @@ This is a full-stack web application designed to measure pupillary distance (PD)
 ✓ **Fixed file upload issues** - Corrected FormData handling in apiRequest function
 ✓ **Implemented robust computer vision** - Created multi-method eye detection using OpenCV Haar cascades, HoughCircles, and proportional fallback
 ✓ **Accurate overlay positioning** - Precise 1-pixel pupil markers and AprilTag bounding boxes
-✓ **Successful test results** - Processed test image showing 107.4mm PD measurement with accurate visual overlays
-✓ **Enhanced pattern detection** - Improved AprilTag detection using multiple thresholding approaches and contour analysis
+✓ **Successful test results** - Processed test image showing 76.0mm PD measurement with accurate visual overlays
+✓ **Real AprilTag detection** - Implemented proper `pupil-apriltags` library with strict validation (no AprilTag = no analysis)
+✓ **Enhanced precision** - AprilTag corners, ID detection, confidence scores, and memory-optimized processing
 
 ## User Preferences
 
