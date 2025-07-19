@@ -10,26 +10,177 @@ import sys
 import os
 from pupil_apriltags import Detector
 
+def detect_pupil_in_eye_region(eye_region, debug_name="eye"):
+    """Detect precise pupil center within an eye region using multiple methods"""
+    
+    if eye_region.size == 0:
+        return None
+    
+    h, w = eye_region.shape
+    center_x, center_y = w // 2, h // 2
+    
+    # Method 1: Find darkest region (pupil)
+    blurred = cv2.GaussianBlur(eye_region, (5, 5), 0)
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred)
+    darkest_point = min_loc
+    
+    # Method 2: HoughCircles for circular pupil detection
+    circles = cv2.HoughCircles(eye_region, cv2.HOUGH_GRADIENT, 1, 10,
+                              param1=50, param2=15, minRadius=2, maxRadius=min(w, h)//3)
+    
+    best_pupil = darkest_point
+    best_score = 0
+    
+    if circles is not None:
+        circles = np.round(circles[0, :]).astype("int")
+        for (x, y, r) in circles:
+            # Score based on darkness and centrality
+            if 0 <= x < w and 0 <= y < h:
+                darkness_score = 255 - eye_region[y, x]  # Darker is higher score
+                center_distance = np.sqrt((x - center_x)**2 + (y - center_y)**2)
+                centrality_score = max(0, min(w, h) // 2 - center_distance)
+                total_score = darkness_score + centrality_score * 2
+                
+                if total_score > best_score:
+                    best_score = total_score
+                    best_pupil = (x, y)
+    
+    # Method 3: Contour-based pupil detection with adaptive thresholding
+    _, thresh = cv2.threshold(eye_region, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    thresh = cv2.bitwise_not(thresh)  # Invert so pupil is white
+    
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if 10 < area < (w * h * 0.3):  # Reasonable pupil size
+            M = cv2.moments(contour)
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                
+                # Score this contour
+                if 0 <= cx < w and 0 <= cy < h:
+                    darkness_score = 255 - eye_region[cy, cx]
+                    center_distance = np.sqrt((cx - center_x)**2 + (cy - center_y)**2)
+                    centrality_score = max(0, min(w, h) // 2 - center_distance)
+                    area_score = min(area / 50, 20)  # Moderate size preferred
+                    total_score = darkness_score + centrality_score * 2 + area_score
+                    
+                    if total_score > best_score:
+                        best_score = total_score
+                        best_pupil = (cx, cy)
+    
+    # Method 4: Adaptive threshold for better pupil detection in varying lighting
+    adaptive_thresh = cv2.adaptiveThreshold(eye_region, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                          cv2.THRESH_BINARY, 11, 2)
+    adaptive_thresh = cv2.bitwise_not(adaptive_thresh)
+    
+    adaptive_contours, _ = cv2.findContours(adaptive_thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    for contour in adaptive_contours:
+        area = cv2.contourArea(contour)
+        if 5 < area < (w * h * 0.25):
+            M = cv2.moments(contour)
+            if M["m00"] != 0:
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                
+                if 0 <= cx < w and 0 <= cy < h:
+                    # Enhanced scoring for adaptive threshold results
+                    darkness_score = 255 - eye_region[cy, cx]
+                    center_distance = np.sqrt((cx - center_x)**2 + (cy - center_y)**2)
+                    centrality_score = max(0, min(w, h) // 2 - center_distance)
+                    
+                    # Bonus for circular shape
+                    perimeter = cv2.arcLength(contour, True)
+                    if perimeter > 0:
+                        circularity = 4 * np.pi * area / (perimeter * perimeter)
+                        circularity_score = circularity * 30  # Bonus for circular shapes
+                    else:
+                        circularity_score = 0
+                    
+                    total_score = darkness_score + centrality_score * 2 + circularity_score
+                    
+                    if total_score > best_score:
+                        best_score = total_score
+                        best_pupil = (cx, cy)
+    
+    # Method 5: Gradient-based edge detection for pupil boundary
+    sobelx = cv2.Sobel(eye_region, cv2.CV_64F, 1, 0, ksize=3)
+    sobely = cv2.Sobel(eye_region, cv2.CV_64F, 0, 1, ksize=3)
+    gradient_magnitude = np.sqrt(sobelx**2 + sobely**2)
+    
+    # Find strong edges that might be pupil boundaries
+    strong_edges = gradient_magnitude > np.mean(gradient_magnitude) + np.std(gradient_magnitude)
+    
+    if np.any(strong_edges):
+        # Find the most central strong edge point
+        y_coords, x_coords = np.where(strong_edges)
+        if len(x_coords) > 0:
+            # Weight by distance from center and edge strength
+            distances = np.sqrt((x_coords - center_x)**2 + (y_coords - center_y)**2)
+            weights = gradient_magnitude[y_coords, x_coords] / (distances + 1)
+            
+            best_idx = np.argmax(weights)
+            edge_pupil = (x_coords[best_idx], y_coords[best_idx])
+            
+            # Score this edge-based detection
+            if 0 <= edge_pupil[0] < w and 0 <= edge_pupil[1] < h:
+                darkness_score = 255 - eye_region[edge_pupil[1], edge_pupil[0]]
+                center_distance = np.sqrt((edge_pupil[0] - center_x)**2 + (edge_pupil[1] - center_y)**2)
+                centrality_score = max(0, min(w, h) // 2 - center_distance)
+                edge_score = weights[best_idx] * 10  # Bonus for strong edges
+                total_score = darkness_score + centrality_score * 2 + edge_score
+                
+                if total_score > best_score:
+                    best_score = total_score
+                    best_pupil = edge_pupil
+    
+    return best_pupil
+
 def detect_face_landmarks(image):
-    """Detect face landmarks using OpenCV Haar cascades"""
+    """Enhanced face and pupil detection using multiple computer vision techniques"""
     
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape
     
-    # Try multiple Haar cascade approaches
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    # Step 1: Robust face detection with multiple cascades
+    face_cascades = [
+        cv2.data.haarcascades + 'haarcascade_frontalface_default.xml',
+        cv2.data.haarcascades + 'haarcascade_frontalface_alt.xml',
+        cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
+    ]
     
     faces = []
-    for scale_factor in [1.05, 1.1, 1.2, 1.3]:
-        for min_neighbors in [3, 4, 5]:
-            detected = face_cascade.detectMultiScale(gray, scale_factor, min_neighbors, minSize=(50, 50))
-            if len(detected) > 0:
-                faces = detected
-                break
+    for cascade_file in face_cascades:
+        try:
+            face_cascade = cv2.CascadeClassifier(cascade_file)
+            for scale_factor in [1.05, 1.1, 1.2]:
+                for min_neighbors in [3, 4, 5]:
+                    detected = face_cascade.detectMultiScale(gray, scale_factor, min_neighbors, 
+                                                           minSize=(50, 50), maxSize=(w, h))
+                    if len(detected) > 0:
+                        faces.extend(detected)
+                        break
+                if len(faces) > 0:
+                    break
+        except:
+            continue
         if len(faces) > 0:
             break
     
-    # If no face detected, assume central face region
+    # If no face detected, use profile or assume central region
+    if len(faces) == 0:
+        try:
+            profile_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_profileface.xml')
+            profiles = profile_cascade.detectMultiScale(gray, 1.1, 4, minSize=(50, 50))
+            if len(profiles) > 0:
+                faces = profiles
+        except:
+            pass
+    
+    # Fallback to central face region
     if len(faces) == 0:
         face_w = int(w * 0.6)
         face_h = int(h * 0.8)
@@ -37,51 +188,117 @@ def detect_face_landmarks(image):
         face_y = int(h * 0.1)
         faces = [(face_x, face_y, face_w, face_h)]
     
-    # Use the largest face
-    face = max(faces, key=lambda x: x[2] * x[3])
-    fx, fy, fw, fh = face
-    
-    # Try eye detection methods
-    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
-    eye_glasses_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye_tree_eyeglasses.xml')
+    # Use the largest, most central face
+    best_face = max(faces, key=lambda f: f[2] * f[3])
+    fx, fy, fw, fh = best_face
     
     face_gray = gray[fy:fy+fh, fx:fx+fw]
-    eyes = []
     
-    # Try regular eye detection
-    eyes1 = eye_cascade.detectMultiScale(face_gray, 1.1, 3, minSize=(15, 15))
-    if len(eyes1) >= 2:
-        eyes = eyes1
+    # Step 2: Enhanced eye region detection
+    eye_candidates = []
     
-    # Try eye with glasses detection
-    if len(eyes) < 2:
-        eyes2 = eye_glasses_cascade.detectMultiScale(face_gray, 1.1, 3, minSize=(15, 15))
-        if len(eyes2) >= 2:
-            eyes = eyes2
+    # Method 1: Multiple eye cascade classifiers
+    eye_cascades = [
+        cv2.data.haarcascades + 'haarcascade_eye.xml',
+        cv2.data.haarcascades + 'haarcascade_eye_tree_eyeglasses.xml',
+        cv2.data.haarcascades + 'haarcascade_lefteye_2splits.xml',
+        cv2.data.haarcascades + 'haarcascade_righteye_2splits.xml'
+    ]
     
-    # HoughCircles for pupil detection
-    if len(eyes) < 2:
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-        face_enhanced = clahe.apply(face_gray)
+    for cascade_file in eye_cascades:
+        try:
+            eye_cascade = cv2.CascadeClassifier(cascade_file)
+            for scale in [1.05, 1.1, 1.15]:
+                for neighbors in [3, 4, 5]:
+                    eyes = eye_cascade.detectMultiScale(face_gray, scale, neighbors, 
+                                                       minSize=(10, 10), maxSize=(fw//3, fh//3))
+                    if len(eyes) >= 2:
+                        eye_candidates.extend(eyes)
+                        break
+                if len(eye_candidates) >= 2:
+                    break
+        except:
+            continue
+        if len(eye_candidates) >= 2:
+            break
+    
+    # Method 2: Template matching for eye patterns
+    if len(eye_candidates) < 2:
+        # Create simple eye templates
+        eye_template = np.zeros((20, 30), dtype=np.uint8)
+        cv2.ellipse(eye_template, (15, 10), (12, 6), 0, 0, 360, 255, -1)
+        cv2.ellipse(eye_template, (15, 10), (4, 4), 0, 0, 360, 0, -1)  # Pupil
         
-        circles = cv2.HoughCircles(face_enhanced, cv2.HOUGH_GRADIENT, 1, 20,
-                                 param1=50, param2=30, minRadius=3, maxRadius=15)
+        result = cv2.matchTemplate(face_gray, eye_template, cv2.TM_CCOEFF_NORMED)
+        locations = np.where(result >= 0.3)
         
-        if circles is not None:
-            circles = np.round(circles[0, :]).astype("int")
-            eye_candidates = []
-            for (x, y, r) in circles:
-                if y < fh * 0.6:  # Upper 60% of face
-                    eye_candidates.append((x, y, r*2, r*2))
-            
+        for pt in zip(*locations[::-1]):
+            eye_candidates.append((pt[0], pt[1], 30, 20))
+    
+    # Method 3: Advanced HoughCircles with preprocessing
+    if len(eye_candidates) < 2:
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        enhanced = clahe.apply(face_gray)
+        
+        # Multiple HoughCircles parameters
+        for dp in [1, 2]:
+            for min_dist in [15, 20, 30]:
+                for param1 in [50, 100]:
+                    for param2 in [15, 20, 25]:
+                        circles = cv2.HoughCircles(enhanced, cv2.HOUGH_GRADIENT, dp, min_dist,
+                                                 param1=param1, param2=param2, 
+                                                 minRadius=3, maxRadius=20)
+                        
+                        if circles is not None:
+                            circles = np.round(circles[0, :]).astype("int")
+                            for (x, y, r) in circles:
+                                if y < fh * 0.7:  # Upper portion of face
+                                    eye_candidates.append((x-r, y-r, r*2, r*2))
+                        
+                        if len(eye_candidates) >= 2:
+                            break
+                    if len(eye_candidates) >= 2:
+                        break
+                if len(eye_candidates) >= 2:
+                    break
             if len(eye_candidates) >= 2:
-                eye_candidates.sort(key=lambda e: (e[1], e[0]))
-                eyes = eye_candidates[:2]
+                break
     
-    # Fallback to proportional estimation
-    if len(eyes) < 2:
-        eye_y = int(fh * 0.4)
-        eye_separation = int(fw * 0.25)
+    # Step 3: Filter and select best eye candidates
+    if len(eye_candidates) >= 2:
+        # Filter by position (should be in upper half of face, horizontally separated)
+        valid_eyes = []
+        for (ex, ey, ew, eh) in eye_candidates:
+            if (ey + eh/2) < fh * 0.65 and ew > 5 and eh > 5:  # Upper face region
+                valid_eyes.append((ex, ey, ew, eh))
+        
+        if len(valid_eyes) >= 2:
+            # Sort by horizontal position and take leftmost and rightmost
+            valid_eyes.sort(key=lambda e: e[0])
+            
+            # Remove eyes that are too close to each other
+            filtered_eyes = []
+            for eye in valid_eyes:
+                too_close = False
+                for existing in filtered_eyes:
+                    distance = abs(eye[0] - existing[0])
+                    if distance < fw * 0.15:  # Too close horizontally
+                        too_close = True
+                        break
+                if not too_close:
+                    filtered_eyes.append(eye)
+            
+            if len(filtered_eyes) >= 2:
+                eye_candidates = [filtered_eyes[0], filtered_eyes[-1]]  # Leftmost and rightmost
+            else:
+                eye_candidates = valid_eyes[:2]
+        else:
+            eye_candidates = eye_candidates[:2]
+    
+    # Step 4: Fallback to proportional estimation if needed
+    if len(eye_candidates) < 2:
+        eye_y = int(fh * 0.37)  # Eyes are typically at 37% down from top of face
+        eye_separation = int(fw * 0.25)  # Eyes are about 25% of face width apart
         face_center_x = fw // 2
         
         left_eye_x = face_center_x - eye_separation
@@ -89,21 +306,66 @@ def detect_face_landmarks(image):
         
         eye_size = int(fw * 0.08)
         
-        eyes = [
+        eye_candidates = [
             (left_eye_x - eye_size//2, eye_y - eye_size//2, eye_size, eye_size),
             (right_eye_x - eye_size//2, eye_y - eye_size//2, eye_size, eye_size)
         ]
     
-    # Sort eyes by x-coordinate and take the two most separated
-    eyes = sorted(eyes, key=lambda x: x[0])
-    if len(eyes) > 2:
-        eyes = [eyes[0], eyes[-1]]
+    # Ensure we have exactly 2 eyes, sorted left to right
+    if len(eye_candidates) > 2:
+        eye_candidates = sorted(eye_candidates, key=lambda e: e[0])
+        eye_candidates = [eye_candidates[0], eye_candidates[-1]]
+    elif len(eye_candidates) == 1:
+        # Duplicate the eye and offset for left/right
+        ex, ey, ew, eh = eye_candidates[0]
+        offset = int(fw * 0.2)
+        eye_candidates = [
+            (ex - offset, ey, ew, eh),
+            (ex + offset, ey, ew, eh)
+        ]
     
-    # Calculate eye centers and convert to full image coordinates
-    left_eye_center = (fx + eyes[0][0] + eyes[0][2]//2, fy + eyes[0][1] + eyes[0][3]//2)
-    right_eye_center = (fx + eyes[1][0] + eyes[1][2]//2, fy + eyes[1][1] + eyes[1][3]//2)
+    eye_candidates = sorted(eye_candidates, key=lambda e: e[0])  # Sort left to right
     
-    return left_eye_center, right_eye_center
+    # Step 5: Precise pupil detection within each eye region
+    left_eye_region = eye_candidates[0]
+    right_eye_region = eye_candidates[1]
+    
+    # Extract eye regions and detect pupils
+    lex, ley, lew, leh = left_eye_region
+    rex, rey, rew, reh = right_eye_region
+    
+    # Ensure regions are within bounds
+    lex = max(0, lex)
+    ley = max(0, ley)
+    lew = min(lew, fw - lex)
+    leh = min(leh, fh - ley)
+    
+    rex = max(0, rex)
+    rey = max(0, rey)
+    rew = min(rew, fw - rex)
+    reh = min(reh, fh - rey)
+    
+    if lew > 0 and leh > 0:
+        left_eye_img = face_gray[ley:ley+leh, lex:lex+lew]
+        left_pupil_local = detect_pupil_in_eye_region(left_eye_img, "left")
+        if left_pupil_local:
+            left_pupil = (fx + lex + left_pupil_local[0], fy + ley + left_pupil_local[1])
+        else:
+            left_pupil = (fx + lex + lew//2, fy + ley + leh//2)
+    else:
+        left_pupil = (fx + lex + lew//2, fy + ley + leh//2)
+    
+    if rew > 0 and reh > 0:
+        right_eye_img = face_gray[rey:rey+reh, rex:rex+rew]
+        right_pupil_local = detect_pupil_in_eye_region(right_eye_img, "right")
+        if right_pupil_local:
+            right_pupil = (fx + rex + right_pupil_local[0], fy + rey + right_pupil_local[1])
+        else:
+            right_pupil = (fx + rex + rew//2, fy + rey + reh//2)
+    else:
+        right_pupil = (fx + rex + rew//2, fy + rey + reh//2)
+    
+    return left_pupil, right_pupil
 
 def detect_apriltags(image):
     """Detect AprilTags using the proper pupil-apriltags library"""

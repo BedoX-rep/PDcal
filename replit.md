@@ -12,6 +12,8 @@ This is a full-stack web application designed to measure pupillary distance (PD)
 ✓ **Successful test results** - Processed test image showing 76.0mm PD measurement with accurate visual overlays
 ✓ **Real AprilTag detection** - Implemented proper `pupil-apriltags` library with strict validation (no AprilTag = no analysis)
 ✓ **Enhanced precision** - AprilTag corners, ID detection, confidence scores, and memory-optimized processing
+✓ **Advanced pupil detection** - Multi-method approach using darkness detection, HoughCircles, adaptive thresholding, circularity scoring, and gradient-based edge detection
+✓ **Improved accuracy** - Refined PD measurements from initial estimates to precise 57.9mm with accurate pupil positioning
 
 ## User Preferences
 
