@@ -7,6 +7,7 @@ export interface IStorage {
   createMeasurement(measurement: InsertMeasurement): Promise<Measurement>;
   getMeasurement(id: number): Promise<Measurement | undefined>;
   getAllMeasurements(): Promise<Measurement[]>;
+  updateMeasurement(id: number, updates: Partial<Measurement>): Promise<Measurement>;
 }
 
 export class MemStorage implements IStorage {
@@ -54,6 +55,9 @@ export class MemStorage implements IStorage {
       scaleFactor: insertMeasurement.scaleFactor ?? null,
       apriltagDetected: insertMeasurement.apriltagDetected ?? null,
       pupilsDetected: insertMeasurement.pupilsDetected ?? null,
+      leftOcularHeight: insertMeasurement.leftOcularHeight ?? null,
+      rightOcularHeight: insertMeasurement.rightOcularHeight ?? null,
+      ocularHeightAnalyzed: insertMeasurement.ocularHeightAnalyzed ?? null,
       errorMessage: insertMeasurement.errorMessage ?? null,
       createdAt: new Date()
     };
@@ -67,6 +71,17 @@ export class MemStorage implements IStorage {
 
   async getAllMeasurements(): Promise<Measurement[]> {
     return Array.from(this.measurements.values());
+  }
+
+  async updateMeasurement(id: number, updates: Partial<Measurement>): Promise<Measurement> {
+    const existing = this.measurements.get(id);
+    if (!existing) {
+      throw new Error(`Measurement with id ${id} not found`);
+    }
+    
+    const updated = { ...existing, ...updates };
+    this.measurements.set(id, updated);
+    return updated;
   }
 }
 

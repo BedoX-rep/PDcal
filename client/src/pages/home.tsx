@@ -33,9 +33,21 @@ interface ProcessingResult {
   };
 }
 
+interface OcularHeightResult {
+  success: boolean;
+  measurement: Measurement;
+  ocularAnalysis: {
+    leftOcularHeight: number;
+    rightOcularHeight: number;
+    confidence: number;
+    analysisNotes: string;
+  };
+}
+
 export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
+  const [ocularHeightResult, setOcularHeightResult] = useState<OcularHeightResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -49,6 +61,7 @@ export default function Home() {
     },
     onSuccess: (data: ProcessingResult) => {
       setProcessingResult(data);
+      setOcularHeightResult(null); // Reset ocular height when new image is processed
       setError(null);
       toast({
         title: "Success!",
@@ -66,15 +79,39 @@ export default function Home() {
     }
   });
 
+  const ocularHeightMutation = useMutation({
+    mutationFn: async (measurementId: number) => {
+      const response = await apiRequest('POST', `/api/measurements/${measurementId}/ocular-height`, {});
+      return response.json();
+    },
+    onSuccess: (data: OcularHeightResult) => {
+      setOcularHeightResult(data);
+      toast({
+        title: "Ocular Height Analysis Complete!",
+        description: `Left: ${data.ocularAnalysis.leftOcularHeight.toFixed(1)}mm, Right: ${data.ocularAnalysis.rightOcularHeight.toFixed(1)}mm`,
+      });
+    },
+    onError: (error: any) => {
+      console.error('Ocular height analysis error:', error);
+      toast({
+        title: "Analysis Failed",
+        description: error.message || "Could not analyze ocular height",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
     setProcessingResult(null);
+    setOcularHeightResult(null);
     setError(null);
   };
 
   const handleRemoveFile = () => {
     setSelectedFile(null);
     setProcessingResult(null);
+    setOcularHeightResult(null);
     setError(null);
   };
 
@@ -87,7 +124,14 @@ export default function Home() {
   const handleNewMeasurement = () => {
     setSelectedFile(null);
     setProcessingResult(null);
+    setOcularHeightResult(null);
     setError(null);
+  };
+
+  const handleAnalyzeOcularHeight = () => {
+    if (processingResult?.measurement?.id) {
+      ocularHeightMutation.mutate(processingResult.measurement.id);
+    }
   };
 
   const downloadAprilTag = () => {
@@ -195,7 +239,7 @@ export default function Home() {
                 size="lg"
               >
                 <Eye className="mr-2 h-4 w-4" />
-                Analyze Photo
+                Analyze Photo PD and Ocular Height
               </Button>
             </div>
           )}
@@ -363,6 +407,63 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Ocular Height Analysis */}
+                  {!ocularHeightResult && (
+                    <div className="space-y-3">
+                      <Button 
+                        className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-700 hover:to-purple-800"
+                        onClick={handleAnalyzeOcularHeight}
+                        disabled={ocularHeightMutation.isPending}
+                      >
+                        {ocularHeightMutation.isPending ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                        ) : (
+                          <Eye className="mr-2 h-4 w-4" />
+                        )}
+                        {ocularHeightMutation.isPending ? "Analyzing Ocular Height..." : "Analyze Ocular Height with AI"}
+                      </Button>
+                      <p className="text-xs text-slate-500 text-center">
+                        Uses Gemini AI to measure vertical distance from pupil to frame bottom
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Ocular Height Results */}
+                  {ocularHeightResult && (
+                    <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-6 space-y-4">
+                      <div className="text-center">
+                        <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-purple-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Eye className="text-white text-xl" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-800 mb-4">Ocular Height Analysis</h3>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-purple-600 mb-1">
+                              {ocularHeightResult.ocularAnalysis.leftOcularHeight.toFixed(1)}
+                            </div>
+                            <p className="text-sm text-slate-600 font-medium">Left Eye (mm)</p>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-2xl font-bold text-purple-600 mb-1">
+                              {ocularHeightResult.ocularAnalysis.rightOcularHeight.toFixed(1)}
+                            </div>
+                            <p className="text-sm text-slate-600 font-medium">Right Eye (mm)</p>
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-slate-500 mb-3">
+                          Confidence: {Math.round(ocularHeightResult.ocularAnalysis.confidence * 100)}%
+                        </div>
+                        
+                        <div className="bg-white/50 rounded-lg p-3 text-left">
+                          <p className="text-xs text-slate-600 font-medium mb-1">AI Analysis Notes:</p>
+                          <p className="text-xs text-slate-500">{ocularHeightResult.ocularAnalysis.analysisNotes}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Save/Export Options */}
                   <div className="space-y-3">

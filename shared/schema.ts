@@ -21,6 +21,9 @@ export const measurements = pgTable("measurements", {
   scaleFactor: real("scale_factor"),
   apriltagDetected: integer("apriltag_detected").$type<boolean>(),
   pupilsDetected: integer("pupils_detected").$type<boolean>(),
+  leftOcularHeight: real("left_ocular_height"),
+  rightOcularHeight: real("right_ocular_height"),
+  ocularHeightAnalyzed: integer("ocular_height_analyzed").$type<boolean>(),
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").defaultNow(),
 });

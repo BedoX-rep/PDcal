@@ -6,6 +6,7 @@ import path from "path";
 import fs from "fs";
 import { storage } from "./storage";
 import { insertMeasurementSchema } from "@shared/schema";
+import { analyzeOcularHeight } from "./gemini";
 
 // Configure multer for file uploads
 const upload = multer({ 
@@ -155,6 +156,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Get measurements error:', error);
       res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Analyze ocular height using Gemini
+  app.post("/api/measurements/:id/ocular-height", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const measurement = await storage.getMeasurement(id);
+      
+      if (!measurement) {
+        return res.status(404).json({ error: "Measurement not found" });
+      }
+
+      if (!measurement.processedImagePath || !measurement.pdValue) {
+        return res.status(400).json({ error: "Measurement must have processed image and PD value" });
+      }
+
+      const imagePath = path.join(process.cwd(), 'server/processed_images', measurement.processedImagePath);
+      
+      if (!fs.existsSync(imagePath)) {
+        return res.status(404).json({ error: "Processed image not found" });
+      }
+
+      // Analyze ocular height with Gemini
+      const ocularAnalysis = await analyzeOcularHeight(imagePath, measurement.pdValue);
+
+      // Update measurement with ocular height data
+      const updatedMeasurement = await storage.updateMeasurement(id, {
+        leftOcularHeight: ocularAnalysis.leftOcularHeight,
+        rightOcularHeight: ocularAnalysis.rightOcularHeight,
+        ocularHeightAnalyzed: true,
+      });
+
+      res.json({
+        success: true,
+        measurement: updatedMeasurement,
+        ocularAnalysis,
+      });
+
+    } catch (error: any) {
+      console.error('Ocular height analysis error:', error);
+      res.status(500).json({ error: error.message || "Failed to analyze ocular height" });
     }
   });
 
