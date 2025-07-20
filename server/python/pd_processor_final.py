@@ -244,18 +244,9 @@ def process_image(image_path):
         left_eye = (int(left_eye[0]), int(left_eye[1]))
         right_eye = (int(right_eye[0]), int(right_eye[1]))
         
-        # Draw pupil markers with better visibility
-        # Draw outer circle (larger, green)
-        cv2.circle(processed_image, left_eye, 6, (0, 255, 0), 2)
-        cv2.circle(processed_image, right_eye, 6, (0, 255, 0), 2)
-        
-        # Draw inner circle (smaller, red for better contrast)
-        cv2.circle(processed_image, left_eye, 3, (0, 0, 255), -1)
-        cv2.circle(processed_image, right_eye, 3, (0, 0, 255), -1)
-        
-        # Draw precise center pixel (white dot)
-        cv2.circle(processed_image, left_eye, 1, (255, 255, 255), -1)
-        cv2.circle(processed_image, right_eye, 1, (255, 255, 255), -1)
+        # Draw small, thin pupil markers that don't obscure the pupils
+        cv2.circle(processed_image, left_eye, 2, (0, 255, 0), 1)
+        cv2.circle(processed_image, right_eye, 2, (0, 255, 0), 1)
         
         # Draw line between pupils with better visibility
         cv2.line(processed_image, left_eye, right_eye, (0, 255, 0), 3)
