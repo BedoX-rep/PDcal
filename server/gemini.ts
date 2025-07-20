@@ -48,15 +48,15 @@ KEY DISTINCTIONS:
 
 INPUT DATA:
 - Reference PD: ${pdValue}mm (verified)
-- Green markers show exact pupil centers
+- Bright blue markers show exact pupil centers
 
 MEASUREMENT STEPS:
 
 1. LOCATE PUPIL MARKERS:
-   Find green circular markers at pupil centers
+   Find bright blue circular markers at pupil centers
 
 2. CALCULATE SCALE:
-   Scale = ${pdValue}mm ÷ (pixel distance between green markers)
+   Scale = ${pdValue}mm ÷ (pixel distance between blue markers)
 
 3. IDENTIFY LENS EDGE (CRITICAL):
    - Look INSIDE the frame boundary
@@ -66,9 +66,8 @@ MEASUREMENT STEPS:
    - Typical lens edge is 60-80% down from pupil to frame bottom
 
 4. MEASURE TO LENS EDGE:
-   - Start: Center of green pupil marker
+   - Start: Center of bright blue pupil marker
    - End: Lens bottom edge (NOT frame bottom)
-   - Expected range: 8-18mm (much shorter than frame distance)
 
 5. MEASURE ACCURATELY:
    - Be as precise as possible with your measurements

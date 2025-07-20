@@ -244,16 +244,16 @@ def process_image(image_path):
         left_eye = (int(left_eye[0]), int(left_eye[1]))
         right_eye = (int(right_eye[0]), int(right_eye[1]))
         
-        # Draw pupil markers with better visibility
-        # Draw outer circle (larger, green)
-        cv2.circle(processed_image, left_eye, 6, (0, 255, 0), 2)
-        cv2.circle(processed_image, right_eye, 6, (0, 255, 0), 2)
+        # Draw pupil markers with bright blue color for AI detection
+        # Draw outer circle (larger, bright blue)
+        cv2.circle(processed_image, left_eye, 8, (255, 0, 0), 3)  # BGR: bright blue
+        cv2.circle(processed_image, right_eye, 8, (255, 0, 0), 3)  # BGR: bright blue
         
-        # Draw inner circle (smaller, red for better contrast)
-        cv2.circle(processed_image, left_eye, 3, (0, 0, 255), -1)
-        cv2.circle(processed_image, right_eye, 3, (0, 0, 255), -1)
+        # Draw inner circle (solid bright blue)
+        cv2.circle(processed_image, left_eye, 4, (255, 0, 0), -1)  # BGR: bright blue filled
+        cv2.circle(processed_image, right_eye, 4, (255, 0, 0), -1)  # BGR: bright blue filled
         
-        # Draw precise center pixel (white dot)
+        # Draw precise center pixel (white dot for exact center)
         cv2.circle(processed_image, left_eye, 1, (255, 255, 255), -1)
         cv2.circle(processed_image, right_eye, 1, (255, 255, 255), -1)
         
