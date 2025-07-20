@@ -46,6 +46,11 @@ This is a processed eye measurement image with:
 - Scale conversion: Use the scale information visible in the image (typically shown as "Scale: X.XXXmm/px")
 - Yellow AprilTag for scale reference
 
+IMPORTANT: 
+- Analyze the image at its original resolution - do not resize or modify the image
+- Use the exact pixel coordinates and measurements as they appear in the provided image
+- Preserve all scale relationships based on the original image dimensions
+
 MEASUREMENT PROTOCOL:
 
 1. LOCATE PUPILS:
