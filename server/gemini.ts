@@ -37,50 +37,50 @@ export async function analyzeOcularHeight(imagePath: string, pdValue: number): P
     try {
       const imageBytes = fs.readFileSync(imagePath);
 
-      const prompt = `OPTICAL MEASUREMENT SYSTEM - OCULAR HEIGHT TO LENS EDGE
+      const prompt = `PRECISE OCULAR HEIGHT MEASUREMENT SYSTEM
 
-CRITICAL TASK: Measure from pupil center to LENS BOTTOM EDGE (NOT frame rim)
+IMAGE ANALYSIS GUIDE:
+This is a processed eye measurement image with:
+- Green horizontal lines marking the pupil locations (pupils are at the ENDS of these green lines)
+- PD reference measurement: ${pdValue}mm
+- Scale conversion: Use the scale information visible in the image (typically shown as "Scale: X.XXXmm/px")
+- Yellow AprilTag for scale reference
 
-KEY DISTINCTIONS:
-- FRAME: The thick outer plastic/metal border you should IGNORE
-- LENS: The actual glass/plastic lens inside the frame (this is your target)
-- LENS EDGE: Where the lens material ends - usually 3-8mm ABOVE the frame bottom
+MEASUREMENT PROTOCOL:
 
-INPUT DATA:
-- Reference PD: ${pdValue}mm (verified)
-- Green markers show exact pupil centers
+1. LOCATE PUPILS:
+   - Find the END POINTS of the green horizontal lines
+   - These endpoints mark the exact pupil centers
+   - Left pupil: left end of left green line
+   - Right pupil: right end of right green line
 
-MEASUREMENT STEPS:
+2. SCALE CALCULATION:
+   - Look for scale text in image (e.g., "Scale: 0.429mm/px")
+   - If scale not visible, calculate: ${pdValue}mm ÷ (pixel distance between pupil endpoints)
 
-1. LOCATE PUPIL MARKERS:
-   Find green circular markers at pupil centers
+3. MEASURE OCULAR HEIGHT:
+   - Start: Exact endpoint of each green line (pupil center)
+   - End: Bottom edge of the eyeglass FRAME directly below each pupil
+   - Measure vertically downward from pupil to frame bottom edge
+   - Count pixels precisely
 
-2. CALCULATE SCALE:
-   Scale = ${pdValue}mm ÷ (pixel distance between green markers)
+4. CALCULATION:
+   - Convert pixel measurements to millimeters using the scale factor
+   - Use identical methodology for both eyes
+   - Report exact measurements
 
-3. IDENTIFY LENS EDGE (CRITICAL):
-   - Look INSIDE the frame boundary
-   - Find where the transparent lens material ends
-   - This appears as a subtle curved line or reflection change
-   - Should be significantly HIGHER than the frame bottom
-   - Typical lens edge is 60-80% down from pupil to frame bottom
+CRITICAL REQUIREMENTS:
+- Measure to the FRAME bottom edge (the visible thick border of the glasses)
+- Use green line endpoints as exact pupil locations
+- Be precise with pixel counting
+- Apply consistent scale conversion
 
-4. MEASURE TO LENS EDGE:
-   - Start: Center of green pupil marker
-   - End: Lens bottom edge (NOT frame bottom)
-   - Expected range: 8-18mm (much shorter than frame distance)
-
-5. MEASURE ACCURATELY:
-   - Be as precise as possible with your measurements
-   - Use the exact same methodology for both eyes
-   - Report your actual findings without adjusting to expected ranges
-
-RETURN FORMAT:
+OUTPUT FORMAT:
 {
-  "leftOcularHeight": measurement_to_LENS_edge_in_mm,
-  "rightOcularHeight": measurement_to_LENS_edge_in_mm,
-  "confidence": 0_to_1_score,
-  "analysisNotes": "Explicitly describe finding the lens edge vs frame boundary"
+  "leftOcularHeight": exact_measurement_in_mm,
+  "rightOcularHeight": exact_measurement_in_mm,
+  "confidence": measurement_confidence_0_to_1,
+  "analysisNotes": "Detailed pixel counts, scale used, and measurement methodology"
 }`;
 
       const contents = [

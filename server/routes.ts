@@ -201,6 +201,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test endpoint for direct ocular height analysis
+  app.post("/api/test-ocular-height", async (req, res) => {
+    try {
+      const { imagePath, pdValue } = req.body;
+      
+      if (!imagePath || !pdValue) {
+        return res.status(400).json({ error: "imagePath and pdValue are required" });
+      }
+      
+      if (!fs.existsSync(imagePath)) {
+        return res.status(404).json({ error: "Image file not found" });
+      }
+
+      // Analyze ocular height with Gemini
+      const ocularAnalysis = await analyzeOcularHeight(imagePath, pdValue);
+
+      res.json({
+        success: true,
+        ocularAnalysis,
+      });
+
+    } catch (error: any) {
+      console.error('Direct ocular height analysis error:', error);
+      res.status(500).json({ error: error.message || "Failed to analyze ocular height" });
+    }
+  });
+
   // Serve processed images
   app.get("/api/images/:filename", (req, res) => {
     const filename = req.params.filename;
