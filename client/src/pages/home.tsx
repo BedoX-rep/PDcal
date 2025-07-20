@@ -81,63 +81,14 @@ export default function Home() {
 
   const ocularHeightMutation = useMutation({
     mutationFn: async (measurementId: number) => {
-      // Perform 3 separate API requests for consistency
-      const results = [];
-      
-      for (let i = 1; i <= 3; i++) {
-        try {
-          const response = await apiRequest('POST', `/api/measurements/${measurementId}/ocular-height`, {});
-          const data = await response.json();
-          
-          if (data.success && data.ocularAnalysis) {
-            results.push({
-              leftOcularHeight: data.ocularAnalysis.leftOcularHeight,
-              rightOcularHeight: data.ocularAnalysis.rightOcularHeight,
-              confidence: data.ocularAnalysis.confidence,
-              analysisNotes: data.ocularAnalysis.analysisNotes
-            });
-          }
-        } catch (error) {
-          console.error(`Ocular height analysis ${i} failed:`, error);
-        }
-        
-        // Add small delay between requests
-        if (i < 3) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-      
-      if (results.length === 0) {
-        throw new Error("All 3 analysis attempts failed");
-      }
-      
-      // Calculate averages
-      const avgLeftHeight = results.reduce((sum, r) => sum + r.leftOcularHeight, 0) / results.length;
-      const avgRightHeight = results.reduce((sum, r) => sum + r.rightOcularHeight, 0) / results.length;
-      const avgConfidence = results.reduce((sum, r) => sum + r.confidence, 0) / results.length;
-      
-      // Find min/max for consistency reporting
-      const leftValues = results.map(r => r.leftOcularHeight);
-      const rightValues = results.map(r => r.rightOcularHeight);
-      const leftRange = Math.max(...leftValues) - Math.min(...leftValues);
-      const rightRange = Math.max(...rightValues) - Math.min(...rightValues);
-      
-      return {
-        success: true,
-        measurement: { id: measurementId },
-        ocularAnalysis: {
-          leftOcularHeight: Math.round(avgLeftHeight * 10) / 10, // Round to 1 decimal
-          rightOcularHeight: Math.round(avgRightHeight * 10) / 10, // Round to 1 decimal
-          confidence: Math.round(avgConfidence * 100) / 100, // Round to 2 decimals
-          analysisNotes: `Average of ${results.length} measurements. Left: ${leftValues.map(v => v.toFixed(1)).join(', ')}mm (range: ${leftRange.toFixed(1)}mm). Right: ${rightValues.map(v => v.toFixed(1)).join(', ')}mm (range: ${rightRange.toFixed(1)}mm). Individual results: ${results.map((r, i) => `Test ${i+1}: L${r.leftOcularHeight.toFixed(1)}/R${r.rightOcularHeight.toFixed(1)}mm`).join(', ')}`
-        }
-      };
+      const response = await apiRequest('POST', `/api/measurements/${measurementId}/ocular-height`, {});
+      return response.json();
     },
     onSuccess: (data: OcularHeightResult) => {
       setOcularHeightResult(data);
       toast({
         title: "Ocular Height Analysis Complete!",
-        description: `Average - Left: ${data.ocularAnalysis.leftOcularHeight.toFixed(1)}mm, Right: ${data.ocularAnalysis.rightOcularHeight.toFixed(1)}mm`,
+        description: `Left: ${data.ocularAnalysis.leftOcularHeight.toFixed(1)}mm, Right: ${data.ocularAnalysis.rightOcularHeight.toFixed(1)}mm`,
       });
     },
     onError: (error: any) => {
@@ -470,10 +421,10 @@ export default function Home() {
                         ) : (
                           <Eye className="mr-2 h-4 w-4" />
                         )}
-                        {ocularHeightMutation.isPending ? "Analyzing Ocular Height (3 tests)..." : "Analyze Photo PD and Ocular Height"}
+                        {ocularHeightMutation.isPending ? "Analyzing Ocular Height..." : "Analyze Ocular Height with AI"}
                       </Button>
                       <p className="text-xs text-slate-500 text-center">
-                        Runs 3 separate AI analyses and averages results for consistency
+                        Uses Gemini AI to measure vertical distance from pupil to frame bottom
                       </p>
                     </div>
                   )}
