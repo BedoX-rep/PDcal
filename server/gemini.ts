@@ -60,8 +60,8 @@ MEASUREMENT PROTOCOL:
 
 3. MEASURE OCULAR HEIGHT:
    - Start: Exact endpoint of each green line (pupil center)
-   - End: Bottom edge of the eyeglass FRAME directly below each pupil
-   - Measure vertically downward from pupil to frame bottom edge
+   - End: Bottom edge of the LENS (not the frame) directly below each pupil
+   - Measure vertically downward from pupil to the lens bottom edge
    - Count pixels precisely
 
 4. CALCULATION:
@@ -70,7 +70,7 @@ MEASUREMENT PROTOCOL:
    - Report exact measurements
 
 CRITICAL REQUIREMENTS:
-- Measure to the FRAME bottom edge (the visible thick border of the glasses)
+- Measure to the LENS bottom edge (NOT the frame - measure to where the lens material ends)
 - Use green line endpoints as exact pupil locations
 - Be precise with pixel counting
 - Apply consistent scale conversion
