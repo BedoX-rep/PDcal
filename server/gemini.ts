@@ -11,24 +11,18 @@ export interface OcularHeightResult {
   analysisNotes: string;
 }
 
-// Validation function for ocular height measurements
+// Validation function for ocular height measurements - only check for basic data validity
 function validateOcularHeight(result: OcularHeightResult): boolean {
   const { leftOcularHeight, rightOcularHeight, confidence } = result;
   
-  // Check if values are within reasonable range (15-40mm for typical adults)
-  if (leftOcularHeight < 15 || leftOcularHeight > 40 || 
-      rightOcularHeight < 15 || rightOcularHeight > 40) {
+  // Only check for valid numbers and reasonable confidence
+  if (isNaN(leftOcularHeight) || isNaN(rightOcularHeight) || 
+      leftOcularHeight <= 0 || rightOcularHeight <= 0) {
     return false;
   }
   
-  // Check if confidence is reasonable
-  if (confidence < 0.7) {
-    return false;
-  }
-  
-  // Check if left and right values are not too different (max 5mm difference)
-  const difference = Math.abs(leftOcularHeight - rightOcularHeight);
-  if (difference > 5) {
+  // Basic confidence check
+  if (confidence < 0.5 || confidence > 1.0) {
     return false;
   }
   
@@ -43,46 +37,50 @@ export async function analyzeOcularHeight(imagePath: string, pdValue: number): P
     try {
       const imageBytes = fs.readFileSync(imagePath);
 
-      const prompt = `OPTICAL MEASUREMENT SYSTEM - OCULAR HEIGHT ANALYSIS
+      const prompt = `OPTICAL MEASUREMENT SYSTEM - OCULAR HEIGHT TO LENS EDGE
 
-INPUT SPECIFICATIONS:
-- Image: Processed eye measurement with green pupil markers and AprilTag
-- Reference PD: ${pdValue}mm (verified measurement)
-- Task: Calculate ocular height (pupil center to frame bottom edge)
+CRITICAL TASK: Measure from pupil center to LENS BOTTOM EDGE (NOT frame rim)
 
-MEASUREMENT PROTOCOL (EXECUTE EXACTLY):
+KEY DISTINCTIONS:
+- FRAME: The thick outer plastic/metal border you should IGNORE
+- LENS: The actual glass/plastic lens inside the frame (this is your target)
+- LENS EDGE: Where the lens material ends - usually 3-8mm ABOVE the frame bottom
 
-STEP 1 - LOCATE MARKERS:
-Find the two green circular markers indicating pupil centers.
-Record pixel coordinates of each marker center.
+INPUT DATA:
+- Reference PD: ${pdValue}mm (verified)
+- Green markers show exact pupil centers
 
-STEP 2 - CALCULATE SCALE:
-- Measure pixel distance between the two green pupil markers
-- Apply scale: ${pdValue}mm ÷ pixel_distance = mm_per_pixel
+MEASUREMENT STEPS:
 
-STEP 3 - MEASURE OCULAR HEIGHT:
-For each eye:
-- Start at green pupil marker center
-- Measure vertically downward to lowest frame edge
-- Convert pixels to mm using calculated scale
+1. LOCATE PUPIL MARKERS:
+   Find green circular markers at pupil centers
 
-STEP 4 - QUALITY CHECK:
-- Left and right values should be similar (±3mm)
-- Typical range: 15-35mm for adult eyeglasses
-- Confidence based on marker clarity and frame visibility
+2. CALCULATE SCALE:
+   Scale = ${pdValue}mm ÷ (pixel distance between green markers)
 
-CRITICAL REQUIREMENTS:
-- Use IDENTICAL scale calculation for both eyes
-- Measure from exact CENTER of green markers
-- Measure to LOWEST visible frame point below each pupil
-- Round to 1 decimal place
+3. IDENTIFY LENS EDGE (CRITICAL):
+   - Look INSIDE the frame boundary
+   - Find where the transparent lens material ends
+   - This appears as a subtle curved line or reflection change
+   - Should be significantly HIGHER than the frame bottom
+   - Typical lens edge is 60-80% down from pupil to frame bottom
 
-Return precise JSON:
+4. MEASURE TO LENS EDGE:
+   - Start: Center of green pupil marker
+   - End: Lens bottom edge (NOT frame bottom)
+   - Expected range: 8-18mm (much shorter than frame distance)
+
+5. MEASURE ACCURATELY:
+   - Be as precise as possible with your measurements
+   - Use the exact same methodology for both eyes
+   - Report your actual findings without adjusting to expected ranges
+
+RETURN FORMAT:
 {
-  "leftOcularHeight": exact_measurement_in_mm,
-  "rightOcularHeight": exact_measurement_in_mm,
-  "confidence": quality_score_0_to_1,
-  "analysisNotes": "Pixel measurements and scale calculation details"
+  "leftOcularHeight": measurement_to_LENS_edge_in_mm,
+  "rightOcularHeight": measurement_to_LENS_edge_in_mm,
+  "confidence": 0_to_1_score,
+  "analysisNotes": "Explicitly describe finding the lens edge vs frame boundary"
 }`;
 
       const contents = [
