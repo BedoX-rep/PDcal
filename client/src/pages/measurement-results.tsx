@@ -174,9 +174,9 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
         </div>
         
         <ImageEditor
-          imageSrc={`/api/images/${measurement.processedImageUrl?.split('/').pop() || ''}`}
-          leftPupil={{ x: Number(measurement.leftPupilX), y: Number(measurement.leftPupilY) }}
-          rightPupil={{ x: Number(measurement.rightPupilX), y: Number(measurement.rightPupilY) }}
+          imageSrc={`/api/images/${measurement.processedImageUrl || measurement.processed_image_url || ''}`}
+          leftPupil={{ x: Number(measurement.leftPupilX || measurement.left_pupil_x), y: Number(measurement.leftPupilY || measurement.left_pupil_y) }}
+          rightPupil={{ x: Number(measurement.rightPupilX || measurement.right_pupil_x), y: Number(measurement.rightPupilY || measurement.right_pupil_y) }}
           onSave={handleImageEditorSave}
           onCancel={() => setShowImageEditor(false)}
         />
@@ -239,7 +239,7 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
           <CardContent className="space-y-4">
             <div className="text-center">
               <div className="text-4xl font-bold text-primary mb-2">
-                {measurement.pdValue}mm
+                {measurement.pdValue || measurement.pd_value}mm
               </div>
               <p className="text-muted-foreground">Total PD</p>
             </div>
@@ -249,25 +249,25 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Pixel Distance:</span>
-                <span className="text-sm font-medium">{measurement.pixelDistance}px</span>
+                <span className="text-sm font-medium">{measurement.pixelDistance || measurement.pixel_distance}px</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Scale Factor:</span>
-                <span className="text-sm font-medium">{measurement.scaleFactor}</span>
+                <span className="text-sm font-medium">{measurement.scaleFactor || measurement.scale_factor}</span>
               </div>
               
-              {measurement.leftMonocularPd && measurement.rightMonocularPd && (
+              {(measurement.leftMonocularPd || measurement.left_monocular_pd) && (measurement.rightMonocularPd || measurement.right_monocular_pd) && (
                 <>
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">Monocular PD</h4>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Left:</span>
-                      <span className="text-sm font-medium">{measurement.leftMonocularPd}mm</span>
+                      <span className="text-sm font-medium">{measurement.leftMonocularPd || measurement.left_monocular_pd}mm</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Right:</span>
-                      <span className="text-sm font-medium">{measurement.rightMonocularPd}mm</span>
+                      <span className="text-sm font-medium">{measurement.rightMonocularPd || measurement.right_monocular_pd}mm</span>
                     </div>
                   </div>
                 </>
@@ -288,7 +288,7 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {measurement.leftOcularHeight && measurement.rightOcularHeight ? (
+            {(measurement.leftOcularHeight || measurement.left_ocular_height) && (measurement.rightOcularHeight || measurement.right_ocular_height) ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="bg-green-100 text-green-800">
@@ -375,10 +375,10 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {measurement.processedImageUrl ? (
+          {(measurement.processedImageUrl || measurement.processed_image_url) ? (
             <div className="aspect-video bg-muted rounded-lg overflow-hidden">
               <img
-                src={`/api/images/${measurement.processedImageUrl.split('/').pop() || ''}`}
+                src={`/api/images/${measurement.processedImageUrl || measurement.processed_image_url}`}
                 alt="Processed measurement"
                 className="w-full h-full object-contain"
               />
