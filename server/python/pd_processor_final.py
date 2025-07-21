@@ -357,7 +357,7 @@ def process_image(image_path):
             "right_monocular_pd": round(right_monocular_pd_mm, 1),
             "pixel_distance": round(float(pixel_distance), 1),
             "scale_factor": round(pixel_scale_factor, 3),
-            "processed_image_path": processed_filename,
+            "processed_image_path": processed_path,
             "apriltag_detected": True,
             "pupils_detected": True,
             "apriltag_id": int(apriltag.tag_id),

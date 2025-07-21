@@ -42,11 +42,9 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
   const result = measurementData?.result;
 
   const saveMeasurementMutation = useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async () => {
       if (!measurement?.id) throw new Error("No measurement to save");
-      const response = await apiRequest("PATCH", `/api/measurements/${measurement.id}`, {
-        measurementName: name || undefined,
-      });
+      const response = await apiRequest("PATCH", `/api/measurements/${measurement.id}/save`, {});
       return response.json();
     },
     onSuccess: () => {
@@ -112,7 +110,7 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
   });
 
   const handleSaveMeasurement = () => {
-    saveMeasurementMutation.mutate(measurementName);
+    saveMeasurementMutation.mutate();
   };
 
   const handleManualOcularHeight = () => {

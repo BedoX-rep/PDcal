@@ -92,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .from('measurement-images')
                 .upload(fileName, imageBuffer, {
                   contentType: 'image/jpeg',
-                  upsert: false
+                  upsert: true
                 });
               
               if (uploadError) {
@@ -130,6 +130,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               pixel_distance: parseFloat(result.pixel_distance),
               scale_factor: parseFloat(result.scale_factor),
               processed_image_url: processedImageUrl,
+              is_saved: false,
             })
             .select()
             .single();
@@ -170,6 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from('measurements')
         .select('*')
         .eq('user_id', user.id)
+        .eq('is_saved', true)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -475,6 +477,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
     } catch (error) {
       console.error('Error serving image:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Save measurement endpoint
+  app.patch("/api/measurements/:id/save", async (req, res) => {
+    try {
+      const user = await getUserFromRequest(req);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const id = parseInt(req.params.id);
+      const { data: measurement, error } = await supabaseAdmin
+        .from('measurements')
+        .update({ is_saved: true, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Save measurement error:', error);
+        return res.status(500).json({ error: "Failed to save measurement" });
+      }
+
+      if (!measurement) {
+        return res.status(404).json({ error: "Measurement not found" });
+      }
+
+      res.json({ success: true, measurement });
+    } catch (error) {
+      console.error('Save measurement error:', error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
