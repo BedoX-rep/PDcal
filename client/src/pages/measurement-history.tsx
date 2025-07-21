@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { ImageEditor } from "@/components/ui/image-editor";
 import { 
   Eye, 
   Calendar, 
@@ -34,12 +34,13 @@ interface OcularHeightResult {
 }
 
 interface MeasurementHistoryProps {
-  onBackToUpload: () => void;
+  onCardClick?: (measurementId: number) => void;
 }
 
-export function MeasurementHistory({ onBackToUpload }: MeasurementHistoryProps) {
+export function MeasurementHistory({ onCardClick }: MeasurementHistoryProps) {
   const [selectedMeasurement, setSelectedMeasurement] = useState<Measurement | null>(null);
   const [showImageEditor, setShowImageEditor] = useState(false);
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -196,10 +197,7 @@ export function MeasurementHistory({ onBackToUpload }: MeasurementHistoryProps) 
               <h1 className="text-2xl font-bold text-slate-800 mb-2">Measurement History</h1>
               <p className="text-muted-foreground">View and manage your pupillary distance measurements</p>
             </div>
-            <Button onClick={onBackToUpload} className="flex items-center space-x-2">
-              <Eye className="h-4 w-4" />
-              <span>New Measurement</span>
-            </Button>
+            {/* Removed New Measurement button - handled by parent component */}
           </div>
         </div>
 
@@ -214,27 +212,39 @@ export function MeasurementHistory({ onBackToUpload }: MeasurementHistoryProps) 
                   <h3 className="text-lg font-semibold text-slate-800">No measurements yet</h3>
                   <p className="text-muted-foreground mt-1">Upload your first image to get started</p>
                 </div>
-                <Button onClick={onBackToUpload} className="mt-4">
-                  <Eye className="h-4 w-4 mr-2" />
-                  Take First Measurement
-                </Button>
+                {/* Removed Take First Measurement button - handled by parent component */}
               </div>
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {measurements.map((measurement: Measurement) => (
-              <Card key={measurement.id} className="hover:shadow-md transition-shadow">
+              <Card 
+                key={measurement.id} 
+                className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => {
+                  if (onCardClick) {
+                    onCardClick(measurement.id);
+                  } else {
+                    setLocation(`/measurement/${measurement.id}`);
+                  }
+                }}
+              >
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg flex items-center space-x-2">
                       <Ruler className="h-5 w-5 text-primary" />
-                      <span>{measurement.pdValue}mm PD</span>
+                      <span>
+                        {measurement.measurementName || `${measurement.pdValue}mm PD`}
+                      </span>
                     </CardTitle>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => deleteMutation.mutate(measurement.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteMutation.mutate(measurement.id);
+                      }}
                       className="text-red-500 hover:text-red-700 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -243,6 +253,9 @@ export function MeasurementHistory({ onBackToUpload }: MeasurementHistoryProps) 
                   <CardDescription className="flex items-center space-x-2 text-sm">
                     <Calendar className="h-4 w-4" />
                     <span>{format(new Date(measurement.createdAt!), 'MMM d, yyyy \'at\' h:mm a')}</span>
+                  </CardDescription>
+                  <CardDescription className="text-lg font-medium text-primary">
+                    {measurement.pdValue}mm PD
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -273,25 +286,18 @@ export function MeasurementHistory({ onBackToUpload }: MeasurementHistoryProps) 
                     )}
                   </div>
 
-                  {/* Ocular Height Section */}
-                  <div className="border-t pt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-medium text-sm">Ocular Height</h4>
-                      {measurement.leftOcularHeight && measurement.rightOcularHeight ? (
+                  {/* Ocular Height Section - Display Only */}
+                  {(measurement.leftOcularHeight && measurement.rightOcularHeight) && (
+                    <div className="border-t pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-sm">Ocular Height</h4>
                         <Badge variant="secondary" className="bg-green-100 text-green-800">
                           <CheckCircle className="h-3 w-3 mr-1" />
                           Complete
                         </Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-yellow-50 text-yellow-800 border-yellow-200">
-                          <Clock className="h-3 w-3 mr-1" />
-                          Pending
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    {measurement.leftOcularHeight && measurement.rightOcularHeight ? (
-                      <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Left OH</p>
                           <p className="font-medium">{measurement.leftOcularHeight}mm</p>
@@ -301,39 +307,8 @@ export function MeasurementHistory({ onBackToUpload }: MeasurementHistoryProps) 
                           <p className="font-medium">{measurement.rightOcularHeight}mm</p>
                         </div>
                       </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground mb-3">
-                        Ocular height not measured yet
-                      </p>
-                    )}
-
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAnalyzeOcularHeight(measurement.id)}
-                        disabled={ocularHeightMutation.isPending}
-                        className="flex-1"
-                      >
-                        {ocularHeightMutation.isPending ? (
-                          <div className="animate-spin h-3 w-3 border-b-2 border-current rounded-full mr-1" />
-                        ) : (
-                          <Eye className="h-3 w-3 mr-1" />
-                        )}
-                        AI Analysis
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleManualOcularHeight(measurement)}
-                        disabled={manualOcularHeightMutation.isPending}
-                        className="flex-1"
-                      >
-                        <Edit className="h-3 w-3 mr-1" />
-                        Manual
-                      </Button>
                     </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

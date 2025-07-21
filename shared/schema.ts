@@ -5,6 +5,7 @@ import { z } from "zod";
 export const measurements = pgTable("measurements", {
   id: serial("id").primaryKey(),
   userId: uuid("user_id").notNull(),
+  measurementName: text("measurement_name"),
   pdValue: decimal("pd_value", { precision: 5, scale: 2 }).notNull(),
   leftPupilX: integer("left_pupil_x").notNull(),
   leftPupilY: integer("left_pupil_y").notNull(),
