@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { ImageEditor } from "@/components/ui/image-editor";
 import { 
@@ -18,7 +19,9 @@ import {
   RotateCcw,
   Save,
   FileText,
-  Edit
+  Edit,
+  LogOut,
+  User
 } from "lucide-react";
 import type { Measurement } from "@shared/schema";
 
@@ -53,6 +56,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [showImageEditor, setShowImageEditor] = useState(false);
   const { toast } = useToast();
+  const { user, signOut } = useAuth();
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -257,9 +261,26 @@ export default function Home() {
                 <p className="text-sm text-slate-500">Accurate Pupillary Distance Calculator</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2 text-sm text-slate-500">
-              <Shield className="h-4 w-4 text-green-600" />
-              <span>Secure & Private</span>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm text-slate-500">
+                <Shield className="h-4 w-4 text-green-600" />
+                <span>Secure & Private</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 text-sm text-slate-600">
+                  <User className="h-4 w-4" />
+                  <span>{user?.email}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={signOut}
+                  className="flex items-center space-x-1"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Sign Out</span>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
