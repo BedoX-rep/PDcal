@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AuthPage } from "@/pages/auth";
-import Home from "@/pages/enhanced-home";
+import EnhancedHome from "@/pages/enhanced-home";
 import MeasurementResults from "@/pages/measurement-results";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
@@ -13,8 +13,10 @@ import { Loader2 } from "lucide-react";
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/measurement/:id" component={MeasurementResults} />
+      <Route path="/" component={EnhancedHome} />
+      <Route path="/measurement/:id">
+        {() => <MeasurementResults />}
+      </Route>
       <Route component={NotFound} />
     </Switch>
   );

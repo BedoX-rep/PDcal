@@ -1,16 +1,17 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRoute } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ImageEditor } from "@/components/ui/image-editor";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Eye, Ruler, Target, Save, Edit2 } from "lucide-react";
+import { ImageEditor } from "@/components/ui/image-editor";
+import { Ruler, Save, Eye, Edit, CheckCircle, Target, ImageIcon, Info } from "lucide-react";
+import { format } from "date-fns";
 import type { Measurement } from "@shared/schema";
 
 interface MeasurementResultsProps {
@@ -26,7 +27,7 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
   const [match, params] = useRoute("/measurement/:id");
   const measurementId = params?.id;
   const [measurementName, setMeasurementName] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [showImageEditor, setShowImageEditor] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -37,11 +38,12 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
   });
 
   // Use either passed data or fetched data
-  const measurement = measurementData?.measurement || fetchedMeasurement;
+  const measurement = (measurementData?.measurement || fetchedMeasurement) as Measurement;
   const result = measurementData?.result;
 
   const saveMeasurementMutation = useMutation({
     mutationFn: async (name: string) => {
+      if (!measurement?.id) throw new Error("No measurement to save");
       const response = await apiRequest("PATCH", `/api/measurements/${measurement.id}`, {
         measurementName: name || undefined,
       });
@@ -66,15 +68,17 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
 
   const manualOcularHeightMutation = useMutation({
     mutationFn: async (data: any) => {
+      if (!measurement?.id) throw new Error("No measurement to update");
       const response = await apiRequest("POST", `/api/measurements/${measurement.id}/manual-ocular-height`, data);
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast({
         title: "Success", 
         description: "Ocular height calculated successfully!",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/measurements", measurement.id.toString()] });
+      setShowImageEditor(false);
     },
     onError: (error) => {
       toast({
@@ -87,6 +91,7 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
 
   const aiAnalysisMutation = useMutation({
     mutationFn: async () => {
+      if (!measurement?.id) throw new Error("No measurement to analyze");
       const response = await apiRequest("POST", `/api/measurements/${measurement.id}/ocular-height`);
       return response.json();
     },
@@ -100,94 +105,135 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
     onError: (error) => {
       toast({
         title: "Error",
-        description: "Failed to complete AI analysis",
+        description: "AI analysis failed",
         variant: "destructive",
       });
     },
   });
 
-  const handleSaveMeasurement = async () => {
-    if (!measurement) return;
-    setIsSaving(true);
-    try {
-      await saveMeasurementMutation.mutateAsync(measurementName);
-    } finally {
-      setIsSaving(false);
-    }
+  const handleSaveMeasurement = () => {
+    saveMeasurementMutation.mutate(measurementName);
   };
 
-  const handleManualOcularHeight = (data: any) => {
-    manualOcularHeightMutation.mutate(data);
+  const handleManualOcularHeight = () => {
+    setShowImageEditor(true);
   };
 
-  const handleAiAnalysis = () => {
+  const handleAIAnalysis = () => {
     aiAnalysisMutation.mutate();
+  };
+
+  const handleImageEditorSave = (leftLineY: number, rightLineY: number, zoomLevel: number, imageWidth: number, imageHeight: number) => {
+    manualOcularHeightMutation.mutate({
+      leftFrameBottomY: leftLineY,
+      rightFrameBottomY: rightLineY,
+      zoomLevel,
+      imageWidth,
+      imageHeight
+    });
   };
 
   if (isLoading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center">Loading measurement...</div>
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   if (!measurement) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="text-center text-red-500">Measurement not found</div>
+      <Card>
+        <CardContent className="pt-6 text-center">
+          <div className="space-y-4">
+            <Target className="h-16 w-16 text-muted-foreground mx-auto" />
+            <div>
+              <h3 className="text-lg font-medium">No measurement found</h3>
+              <p className="text-muted-foreground">
+                The measurement data could not be loaded
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Show image editor if active
+  if (showImageEditor) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Manual Ocular Height Measurement</h2>
+            <p className="text-muted-foreground">Position the frame bottom line for accurate measurement</p>
+          </div>
+          <Button variant="outline" onClick={() => setShowImageEditor(false)}>
+            Cancel
+          </Button>
+        </div>
+        
+        <ImageEditor
+          imageSrc={`/api/images/${measurement.processedImageUrl?.split('/').pop() || ''}`}
+          leftPupil={{ x: Number(measurement.leftPupilX), y: Number(measurement.leftPupilY) }}
+          rightPupil={{ x: Number(measurement.rightPupilX), y: Number(measurement.rightPupilY) }}
+          onSave={handleImageEditorSave}
+          onCancel={() => setShowImageEditor(false)}
+        />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          Measurement Results
-        </h1>
-        <p className="text-muted-foreground">
-          {measurement.measurementName || "Unnamed Measurement"}
-        </p>
-      </div>
-
-      {/* Save Measurement Section - Only show if not saved yet */}
-      {!measurement.measurementName && measurementData && (
-        <Card className="border-blue-200 bg-blue-50/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-blue-700">
-              <Save className="h-5 w-5" />
-              Save This Measurement
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
+    <div className="space-y-6">
+      {/* Save Measurement Section */}
+      <Card className="border-green-200 bg-green-50/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Save className="h-5 w-5" />
+            Save Measurement
+          </CardTitle>
+          <CardDescription>
+            Give your measurement a name and save it to your history
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-4">
+            <div className="flex-1">
               <Label htmlFor="measurement-name">Measurement Name (Optional)</Label>
               <Input
                 id="measurement-name"
-                placeholder="e.g., My PD Measurement, Morning Check, etc."
                 value={measurementName}
                 onChange={(e) => setMeasurementName(e.target.value)}
+                placeholder={`${measurement.pdValue}mm PD - ${format(new Date(), 'MMM d, yyyy')}`}
               />
             </div>
-            <Button 
-              onClick={handleSaveMeasurement}
-              disabled={isSaving}
-              className="w-full"
-            >
-              {isSaving ? "Saving..." : "Save Measurement"}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+            <div className="flex items-end">
+              <Button
+                onClick={handleSaveMeasurement}
+                disabled={saveMeasurementMutation.isPending}
+                className="flex items-center gap-2"
+              >
+                {saveMeasurementMutation.isPending ? (
+                  <div className="animate-spin h-4 w-4 border-b-2 border-current rounded-full" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Save
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Results Summary */}
+      {/* Main Results */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* PD Measurement Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Eye className="h-5 w-5" />
-              Pupillary Distance Results
+              <Ruler className="h-5 w-5" />
+              Pupillary Distance
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -195,26 +241,12 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
               <div className="text-4xl font-bold text-primary mb-2">
                 {measurement.pdValue}mm
               </div>
-              <Badge variant="secondary" className="mb-4">
-                Primary PD Measurement
-              </Badge>
+              <p className="text-muted-foreground">Total PD</p>
             </div>
-
+            
             <Separator />
-
+            
             <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Left Pupil Position:</span>
-                <span className="text-sm font-medium">
-                  ({measurement.leftPupilX}, {measurement.leftPupilY})
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Right Pupil Position:</span>
-                <span className="text-sm font-medium">
-                  ({measurement.rightPupilX}, {measurement.rightPupilY})
-                </span>
-              </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Pixel Distance:</span>
                 <span className="text-sm font-medium">{measurement.pixelDistance}px</span>
@@ -223,94 +255,107 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
                 <span className="text-sm text-muted-foreground">Scale Factor:</span>
                 <span className="text-sm font-medium">{measurement.scaleFactor}</span>
               </div>
-            </div>
-
-            {(measurement.leftMonocularPd || measurement.rightMonocularPd) && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <h4 className="font-medium">Monocular PD</h4>
-                  {measurement.leftMonocularPd && (
+              
+              {measurement.leftMonocularPd && measurement.rightMonocularPd && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Monocular PD</h4>
                     <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Left Eye:</span>
+                      <span className="text-sm text-muted-foreground">Left:</span>
                       <span className="text-sm font-medium">{measurement.leftMonocularPd}mm</span>
                     </div>
-                  )}
-                  {measurement.rightMonocularPd && (
                     <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Right Eye:</span>
+                      <span className="text-sm text-muted-foreground">Right:</span>
                       <span className="text-sm font-medium">{measurement.rightMonocularPd}mm</span>
                     </div>
-                  )}
-                </div>
-              </>
-            )}
+                  </div>
+                </>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        {/* Ocular Height Results */}
+        {/* Ocular Height Card */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Ruler className="h-5 w-5" />
-              Ocular Height Analysis
+              <Target className="h-5 w-5" />
+              Ocular Height
             </CardTitle>
+            <CardDescription>
+              Measure the distance from pupil center to frame bottom
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {measurement.leftOcularHeight || measurement.rightOcularHeight ? (
-              <div className="space-y-3">
-                <div className="text-center">
-                  <Badge variant="outline" className="mb-2">
-                    {measurement.analysisNotes?.includes("Manual") ? "Manual Measurement" : "AI Analysis"}
+            {measurement.leftOcularHeight && measurement.rightOcularHeight ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Complete
                   </Badge>
+                  {measurement.analysisNotes && (
+                    <Badge variant="outline">{measurement.analysisNotes}</Badge>
+                  )}
                   {measurement.ocularConfidence && (
-                    <div className="text-sm text-muted-foreground">
-                      Confidence: {(parseFloat(measurement.ocularConfidence) * 100).toFixed(0)}%
-                    </div>
+                    <Badge variant="outline">
+                      {Math.round(measurement.ocularConfidence * 100)}% confidence
+                    </Badge>
                   )}
                 </div>
-
-                <Separator />
-
-                {measurement.leftOcularHeight && (
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Left Eye Height:</span>
-                    <span className="text-sm font-medium">{measurement.leftOcularHeight}mm</span>
-                  </div>
-                )}
-                {measurement.rightOcularHeight && (
-                  <div className="flex justify-between">
-                    <span className="text-sm text-muted-foreground">Right Eye Height:</span>
-                    <span className="text-sm font-medium">{measurement.rightOcularHeight}mm</span>
-                  </div>
-                )}
-
-                {measurement.analysisNotes && (
-                  <>
-                    <Separator />
-                    <div className="text-sm text-muted-foreground">
-                      {measurement.analysisNotes}
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-primary">
+                      {measurement.leftOcularHeight}mm
                     </div>
-                  </>
+                    <p className="text-sm text-muted-foreground">Left OH</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-primary">
+                      {measurement.rightOcularHeight}mm
+                    </div>
+                    <p className="text-sm text-muted-foreground">Right OH</p>
+                  </div>
+                </div>
+                
+                {measurement.analysisNotes && (
+                  <div className="bg-muted/50 p-3 rounded-lg">
+                    <p className="text-sm">{measurement.analysisNotes}</p>
+                  </div>
                 )}
               </div>
             ) : (
-              <div className="text-center space-y-4">
-                <div className="text-muted-foreground mb-4">
-                  No ocular height analysis performed yet
-                </div>
-                <div className="space-y-2">
+              <div className="space-y-4">
+                <p className="text-muted-foreground text-sm">
+                  Ocular height measurement is required for complete fitting data.
+                  Choose an analysis method below.
+                </p>
+                
+                <div className="grid gap-3">
                   <Button
-                    onClick={handleAiAnalysis}
+                    onClick={handleAIAnalysis}
                     disabled={aiAnalysisMutation.isPending}
-                    className="w-full"
-                    variant="outline"
+                    className="flex items-center gap-2"
                   >
-                    {aiAnalysisMutation.isPending ? "Analyzing..." : "AI Analysis"}
+                    {aiAnalysisMutation.isPending ? (
+                      <div className="animate-spin h-4 w-4 border-b-2 border-current rounded-full" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                    AI Analysis
                   </Button>
-                  <p className="text-xs text-muted-foreground">
-                    Or use manual measurement below
-                  </p>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={handleManualOcularHeight}
+                    disabled={manualOcularHeightMutation.isPending}
+                    className="flex items-center gap-2"
+                  >
+                    <Edit className="h-4 w-4" />
+                    Manual Measurement
+                  </Button>
                 </div>
               </div>
             )}
@@ -318,45 +363,59 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
         </Card>
       </div>
 
-      {/* Processed Image with Manual Measurement */}
-      {measurement.processedImageUrl && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              Processed Image & Manual Measurement
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ImageEditor
-              imageUrl={`/api/images/${measurement.processedImageUrl.split('/').pop()}`}
-              leftPupil={{ x: measurement.leftPupilX, y: measurement.leftPupilY }}
-              rightPupil={{ x: measurement.rightPupilX, y: measurement.rightPupilY }}
-              onManualMeasurement={handleManualOcularHeight}
-              disabled={manualOcularHeightMutation.isPending}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Measurement Metadata */}
+      {/* Processed Image */}
       <Card>
         <CardHeader>
-          <CardTitle>Measurement Details</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <ImageIcon className="h-5 w-5" />
+            Processed Image
+          </CardTitle>
+          <CardDescription>
+            View the analyzed image with detected pupils and measurements
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {measurement.processedImageUrl ? (
+            <div className="aspect-video bg-muted rounded-lg overflow-hidden">
+              <img
+                src={`/api/images/${measurement.processedImageUrl.split('/').pop() || ''}`}
+                alt="Processed measurement"
+                className="w-full h-full object-contain"
+              />
+            </div>
+          ) : (
+            <div className="aspect-video bg-muted rounded-lg flex items-center justify-center">
+              <p className="text-muted-foreground">No processed image available</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Measurement Info */}
+      <Card className="border-blue-200 bg-blue-50/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Info className="h-5 w-5" />
+            Measurement Details
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between">
             <span className="text-muted-foreground">Measurement ID:</span>
-            <span>#{measurement.id}</span>
+            <span className="font-medium">#{measurement.id}</span>
           </div>
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between">
             <span className="text-muted-foreground">Created:</span>
-            <span>{new Date(measurement.createdAt).toLocaleString()}</span>
+            <span className="font-medium">
+              {measurement.createdAt && format(new Date(measurement.createdAt), 'MMM d, yyyy \'at\' h:mm a')}
+            </span>
           </div>
           {measurement.updatedAt && measurement.updatedAt !== measurement.createdAt && (
-            <div className="flex justify-between text-sm">
+            <div className="flex justify-between">
               <span className="text-muted-foreground">Last Updated:</span>
-              <span>{new Date(measurement.updatedAt).toLocaleString()}</span>
+              <span className="font-medium">
+                {format(new Date(measurement.updatedAt), 'MMM d, yyyy \'at\' h:mm a')}
+              </span>
             </div>
           )}
         </CardContent>
