@@ -97,18 +97,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               if (uploadError) {
                 console.error('Image upload error:', uploadError);
-                // Store local path as fallback
-                processedImageUrl = result.processed_image_path.replace(process.cwd() + '/', '');
+                // Store just the filename for local fallback (images are in server/processed_images/)
+                processedImageUrl = path.basename(result.processed_image_path);
               } else {
                 processedImageUrl = uploadData.path;
-                console.log('Image uploaded successfully:', processedImageUrl);
+                console.log('Image uploaded successfully to Supabase:', processedImageUrl);
+                console.log('Upload data:', uploadData);
                 // Clean up local processed image after successful upload
                 fs.unlinkSync(result.processed_image_path);
               }
             } catch (imageError) {
               console.error('Image processing error:', imageError);
-              // Store local path as fallback
-              processedImageUrl = result.processed_image_path.replace(process.cwd() + '/', '');
+              // Store just the filename for local fallback (images are in server/processed_images/)
+              processedImageUrl = path.basename(result.processed_image_path);
             }
           }
 
@@ -138,6 +139,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(500).json({ error: "Failed to save measurement" });
           }
 
+          console.log('Final measurement saved:', measurement);
           res.json({
             success: true,
             measurement,
@@ -423,25 +425,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/images/:path(*)", async (req, res) => {
     try {
       const imagePath = req.params.path;
+      console.log('Serving image request for path:', imagePath);
       
       if (!imagePath) {
         return res.status(400).json({ error: "No image path provided" });
       }
       
       // Try to get from Supabase storage first
+      console.log('Attempting to download from Supabase storage:', imagePath);
       const { data, error } = await supabaseAdmin.storage
         .from('measurement-images')
         .download(imagePath);
       
+      if (error) {
+        console.log('Supabase storage error:', error);
+      }
+      
       if (error || !data) {
+        console.log('Supabase storage failed, trying local fallback');
         // Fallback to local file system for backward compatibility
         const localPath = path.join(process.cwd(), 'server/processed_images', imagePath.split('/').pop() || '');
+        console.log('Trying local path:', localPath);
+        
         if (fs.existsSync(localPath)) {
+          console.log('Found local file, serving it');
           return res.sendFile(path.resolve(localPath));
         }
+        
+        // Also try the full relative path for legacy support
+        const fullLocalPath = path.join(process.cwd(), imagePath);
+        console.log('Trying full local path:', fullLocalPath);
+        if (fs.existsSync(fullLocalPath)) {
+          console.log('Found full local file, serving it');
+          return res.sendFile(path.resolve(fullLocalPath));
+        }
+        
+        console.log('No image found anywhere');
         return res.status(404).json({ error: "Image not found" });
       }
       
+      console.log('Successfully downloaded from Supabase, serving image');
       // Set proper content type
       res.setHeader('Content-Type', 'image/jpeg');
       res.setHeader('Cache-Control', 'public, max-age=3600');
