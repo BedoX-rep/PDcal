@@ -166,9 +166,9 @@ export function MeasurementHistory({ onCardClick }: MeasurementHistoryProps) {
             </Button>
           </div>
           <ImageEditor
-            imageSrc={`/api/images/${selectedMeasurement.processedImageUrl?.split('/').pop() || ''}`}
-            leftPupil={{ x: Number(selectedMeasurement.leftPupilX), y: Number(selectedMeasurement.leftPupilY) }}
-            rightPupil={{ x: Number(selectedMeasurement.rightPupilX), y: Number(selectedMeasurement.rightPupilY) }}
+            imageSrc={`/api/images/${selectedMeasurement.processed_image_url || ''}`}
+            leftPupil={{ x: Number(selectedMeasurement.left_pupil_x), y: Number(selectedMeasurement.left_pupil_y) }}
+            rightPupil={{ x: Number(selectedMeasurement.right_pupil_x), y: Number(selectedMeasurement.right_pupil_y) }}
             onSave={handleImageEditorSave}
             onCancel={handleImageEditorCancel}
           />
@@ -235,7 +235,7 @@ export function MeasurementHistory({ onCardClick }: MeasurementHistoryProps) {
                     <CardTitle className="text-lg flex items-center space-x-2">
                       <Ruler className="h-5 w-5 text-primary" />
                       <span>
-                        {measurement.measurementName || `${measurement.pdValue}mm PD`}
+                        {measurement.measurement_name || `${measurement.pd_value}mm PD`}
                       </span>
                     </CardTitle>
                     <Button
@@ -252,18 +252,18 @@ export function MeasurementHistory({ onCardClick }: MeasurementHistoryProps) {
                   </div>
                   <CardDescription className="flex items-center space-x-2 text-sm">
                     <Calendar className="h-4 w-4" />
-                    <span>{format(new Date(measurement.createdAt!), 'MMM d, yyyy \'at\' h:mm a')}</span>
+                    <span>{format(new Date(measurement.created_at!), 'MMM d, yyyy \'at\' h:mm a')}</span>
                   </CardDescription>
                   <CardDescription className="text-lg font-medium text-primary">
-                    {measurement.pdValue}mm PD
+                    {measurement.pd_value}mm PD
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Processed Image */}
-                  {measurement.processedImageUrl && (
+                  {measurement.processed_image_url && (
                     <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden">
                       <img 
-                        src={`/api/images/${measurement.processedImageUrl.split('/').pop() || ''}`}
+                        src={`/api/images/${measurement.processed_image_url}`}
                         alt="Processed measurement"
                         className="w-full h-full object-contain"
                       />
@@ -272,41 +272,64 @@ export function MeasurementHistory({ onCardClick }: MeasurementHistoryProps) {
 
                   {/* Measurement Details */}
                   <div className="grid grid-cols-2 gap-4 text-sm">
-                    {measurement.leftMonocularPd && (
+                    {measurement.left_monocular_pd && (
                       <div>
                         <p className="text-muted-foreground">Left Monocular</p>
-                        <p className="font-medium">{measurement.leftMonocularPd}mm</p>
+                        <p className="font-medium">{measurement.left_monocular_pd}mm</p>
                       </div>
                     )}
-                    {measurement.rightMonocularPd && (
+                    {measurement.right_monocular_pd && (
                       <div>
                         <p className="text-muted-foreground">Right Monocular</p>
-                        <p className="font-medium">{measurement.rightMonocularPd}mm</p>
+                        <p className="font-medium">{measurement.right_monocular_pd}mm</p>
                       </div>
                     )}
                   </div>
 
-                  {/* Ocular Height Section - Display Only */}
-                  {(measurement.leftOcularHeight && measurement.rightOcularHeight) && (
-                    <div className="border-t pt-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium text-sm">Ocular Height</h4>
+                  {/* Ocular Height Section - Enhanced Display */}
+                  {(measurement.left_ocular_height && measurement.right_ocular_height) ? (
+                    <div className="border-t pt-4 space-y-3">
+                      <div className="flex items-center gap-2">
                         <Badge variant="secondary" className="bg-green-100 text-green-800">
                           <CheckCircle className="h-3 w-3 mr-1" />
-                          Complete
+                          Ocular Height Complete
                         </Badge>
+                        {measurement.ocular_confidence && (
+                          <Badge variant="outline">
+                            {Math.round(Number(measurement.ocular_confidence) * 100)}% confidence
+                          </Badge>
+                        )}
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Left OH</p>
-                          <p className="font-medium">{measurement.leftOcularHeight}mm</p>
+                          <p className="font-medium">{measurement.left_ocular_height}mm</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Right OH</p>
-                          <p className="font-medium">{measurement.rightOcularHeight}mm</p>
+                          <p className="font-medium">{measurement.right_ocular_height}mm</p>
                         </div>
                       </div>
+                      
+                      {measurement.analysis_notes && (
+                        <div className="bg-muted/50 p-2 rounded text-xs">
+                          <strong>Analysis:</strong> {measurement.analysis_notes}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="border-t pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-medium text-sm text-muted-foreground">Ocular Height</h4>
+                        <Badge variant="outline" className="text-orange-600 border-orange-200">
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Pending
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Click the measurement to add ocular height analysis
+                      </p>
                     </div>
                   )}
                 </CardContent>

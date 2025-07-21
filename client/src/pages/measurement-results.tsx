@@ -306,21 +306,21 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-primary">
-                      {measurement.leftOcularHeight}mm
+                      {measurement.left_ocular_height}mm
                     </div>
                     <p className="text-sm text-muted-foreground">Left OH</p>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-primary">
-                      {measurement.rightOcularHeight}mm
+                      {measurement.right_ocular_height}mm
                     </div>
                     <p className="text-sm text-muted-foreground">Right OH</p>
                   </div>
                 </div>
                 
-                {measurement.analysisNotes && (
+                {measurement.analysis_notes && (
                   <div className="bg-muted/50 p-3 rounded-lg">
-                    <p className="text-sm">{measurement.analysisNotes}</p>
+                    <p className="text-sm">{measurement.analysis_notes}</p>
                   </div>
                 )}
               </div>
@@ -412,11 +412,11 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
               {measurement.created_at && format(new Date(measurement.created_at), 'MMM d, yyyy \'at\' h:mm a')}
             </span>
           </div>
-          {measurement.updatedAt && measurement.updatedAt !== measurement.createdAt && (
+          {measurement.updated_at && measurement.updated_at !== measurement.created_at && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Last Updated:</span>
               <span className="font-medium">
-                {format(new Date(measurement.updatedAt), 'MMM d, yyyy \'at\' h:mm a')}
+                {format(new Date(measurement.updated_at), 'MMM d, yyyy \'at\' h:mm a')}
               </span>
             </div>
           )}
