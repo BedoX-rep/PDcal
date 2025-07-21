@@ -4,7 +4,7 @@ import multer from "multer";
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
-import { supabaseAdmin, getUserFromRequest, createAuthenticatedClient } from "./supabase";
+import { supabaseAdmin, getUserFromRequest } from "./supabase";
 import { analyzeOcularHeight } from "./gemini";
 
 // Configure multer for file uploads
@@ -25,19 +25,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Upload and process image endpoint
   app.post("/api/measurements", upload.single('image'), async (req, res) => {
     try {
-      // Get user from token and create authenticated client
-      const authHeader = req.headers.authorization;
-      if (!authHeader) {
-        return res.status(401).json({ error: "Unauthorized - No auth header" });
-      }
-      
-      const token = authHeader.replace('Bearer ', '');
+      // Get user from token
       const user = await getUserFromRequest(req);
       if (!user) {
-        return res.status(401).json({ error: "Unauthorized - Invalid token" });
+        return res.status(401).json({ error: "Unauthorized" });
       }
-      
-      const supabase = createAuthenticatedClient(token);
 
       if (!req.file) {
         return res.status(400).json({ error: "No image file provided" });
@@ -81,47 +73,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(400).json({ error: result.error || "Processing failed" });
           }
 
-          // Upload processed image to Supabase storage
-          let processedImageUrl = null;
-          if (result.processed_image_path && fs.existsSync(result.processed_image_path)) {
-            const imageBuffer = fs.readFileSync(result.processed_image_path);
-            const fileName = `${user.id}/${Date.now()}_processed.jpg`;
-            
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('measurement-images')
-              .upload(fileName, imageBuffer, {
-                contentType: 'image/jpeg',
-                upsert: false
-              });
-            
-            if (uploadError) {
-              console.error('Image upload error:', uploadError);
-            } else {
-              processedImageUrl = uploadData.path;
-              console.log('Image uploaded successfully:', processedImageUrl);
-            }
-            
-            // Clean up local processed image
-            fs.unlinkSync(result.processed_image_path);
-          }
-
-          // Save to Supabase with user authentication context
-          const { data: measurement, error } = await supabase
+          // Save to Supabase
+          const { data: measurement, error } = await supabaseAdmin
             .from('measurements')
             .insert({
               user_id: user.id,
-              pd_value: parseFloat(result.pd_value),
+              pd_value: result.pd_value.toString(),
               left_pupil_x: result.left_pupil.x,
               left_pupil_y: result.left_pupil.y,
               right_pupil_x: result.right_pupil.x,
               right_pupil_y: result.right_pupil.y,
               nose_bridge_x: result.nose_bridge?.x || null,
               nose_bridge_y: result.nose_bridge?.y || null,
-              left_monocular_pd: result.left_monocular_pd ? parseFloat(result.left_monocular_pd) : null,
-              right_monocular_pd: result.right_monocular_pd ? parseFloat(result.right_monocular_pd) : null,
-              pixel_distance: parseFloat(result.pixel_distance),
-              scale_factor: parseFloat(result.scale_factor),
-              processed_image_url: processedImageUrl,
+              left_monocular_pd: result.left_monocular_pd?.toString() || null,
+              right_monocular_pd: result.right_monocular_pd?.toString() || null,
+              pixel_distance: result.pixel_distance.toString(),
+              scale_factor: result.scale_factor.toString(),
+              processed_image_url: result.processed_image_path,
             })
             .select()
             .single();
@@ -198,46 +166,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(measurement);
     } catch (error) {
       console.error('Get measurement error:', error);
-      res.status(500).json({ error: "Internal server error" });
-    }
-  });
-
-  // Update measurement 
-  app.patch("/api/measurements/:id", async (req, res) => {
-    try {
-      const user = await getUserFromRequest(req);
-      if (!user) {
-        return res.status(401).json({ error: "Unauthorized" });
-      }
-
-      const id = parseInt(req.params.id);
-      const { measurementName } = req.body;
-
-      const updateData: any = {};
-      if (measurementName !== undefined) {
-        updateData.measurement_name = measurementName;
-      }
-
-      if (Object.keys(updateData).length === 0) {
-        return res.status(400).json({ error: "No valid fields to update" });
-      }
-
-      const { data: measurement, error } = await supabaseAdmin
-        .from('measurements')
-        .update(updateData)
-        .eq('id', id)
-        .eq('user_id', user.id)
-        .select()
-        .single();
-
-      if (error || !measurement) {
-        console.error('Supabase error:', error);
-        return res.status(404).json({ error: "Measurement not found or update failed" });
-      }
-
-      res.json(measurement);
-    } catch (error) {
-      console.error('Update measurement error:', error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -412,40 +340,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Serve images from Supabase storage or local fallback
-  app.get("/api/images/:path(*)", async (req, res) => {
-    try {
-      const imagePath = req.params.path;
-      
-      if (!imagePath) {
-        return res.status(400).json({ error: "No image path provided" });
-      }
-      
-      // Try to get from Supabase storage first
-      const { data, error } = await supabaseAdmin.storage
-        .from('measurement-images')
-        .download(imagePath);
-      
-      if (error || !data) {
-        // Fallback to local file system for backward compatibility
-        const localPath = path.join(process.cwd(), 'server/processed_images', imagePath.split('/').pop() || '');
-        if (fs.existsSync(localPath)) {
-          return res.sendFile(path.resolve(localPath));
-        }
-        return res.status(404).json({ error: "Image not found" });
-      }
-      
-      // Set proper content type
-      res.setHeader('Content-Type', 'image/jpeg');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      
-      // Convert blob to buffer and send
-      const buffer = Buffer.from(await data.arrayBuffer());
-      res.send(buffer);
-      
-    } catch (error) {
-      console.error('Error serving image:', error);
-      res.status(500).json({ error: "Internal server error" });
+  // Serve processed images
+  app.get("/api/images/:filename", (req, res) => {
+    const filename = req.params.filename;
+    const imagePath = path.join(process.cwd(), 'server/processed_images', filename);
+    
+    if (fs.existsSync(imagePath)) {
+      res.sendFile(path.resolve(imagePath));
+    } else {
+      res.status(404).json({ error: "Image not found" });
     }
   });
 
