@@ -41,7 +41,8 @@ def detect_face_landmarks(image):
             
             left_pupil = (face_center_x - eye_separation, eye_y)
             right_pupil = (face_center_x + eye_separation, eye_y)
-            return left_pupil, right_pupil
+            nose_bridge = (face_center_x, int(h * 0.35))  # Default nose bridge position
+            return left_pupil, right_pupil, nose_bridge
         
         # Get the first (and likely only) face
         face_landmarks = results.multi_face_landmarks[0]
@@ -73,6 +74,10 @@ def detect_face_landmarks(image):
         left_pupil = get_pupil_center(LEFT_EYE_INDICES, face_landmarks, w, h)
         right_pupil = get_pupil_center(RIGHT_EYE_INDICES, face_landmarks, w, h)
         
+        # Calculate nose bridge center using nasal landmarks
+        NOSE_BRIDGE_INDICES = [168, 8, 9, 10, 151]  # Center nose landmarks between eyes
+        nose_bridge = get_pupil_center(NOSE_BRIDGE_INDICES, face_landmarks, w, h)
+        
         # Fallback to eye corner landmarks if iris detection fails
         if left_pupil is None or right_pupil is None:
             print("Iris landmarks not available, using eye corner landmarks", file=sys.stderr)
@@ -93,6 +98,8 @@ def detect_face_landmarks(image):
             
             left_pupil = (face_center_x - eye_separation, eye_y)
             right_pupil = (face_center_x + eye_separation, eye_y)
+            if nose_bridge is None:
+                nose_bridge = (face_center_x, int(h * 0.35))
         
         # Ensure pupils are within image bounds
         left_pupil = (max(0, min(w-1, left_pupil[0])), max(0, min(h-1, left_pupil[1])))
@@ -110,6 +117,8 @@ def detect_face_landmarks(image):
             
             left_pupil = (face_center_x - eye_separation, eye_y)
             right_pupil = (face_center_x + eye_separation, eye_y)
+            if nose_bridge is None:
+                nose_bridge = (face_center_x, int(h * 0.35))
         
         # Ensure left pupil is to the left of right pupil
         if left_pupil[0] > right_pupil[0]:
@@ -117,7 +126,18 @@ def detect_face_landmarks(image):
             left_pupil, right_pupil = right_pupil, left_pupil
         
         print(f"MediaPipe detected pupils - Left: {left_pupil}, Right: {right_pupil}", file=sys.stderr)
-        return left_pupil, right_pupil
+        
+        # If nose bridge detection failed, use fallback calculation
+        if nose_bridge is None:
+            # Calculate nose bridge as midpoint between inner eye corners
+            if left_pupil and right_pupil:
+                nose_bridge = ((left_pupil[0] + right_pupil[0]) // 2, 
+                              min(left_pupil[1], right_pupil[1]) - 20)  # Slightly above pupil line
+            else:
+                nose_bridge = (w // 2, int(h * 0.35))  # Default nose bridge position
+        
+        print(f"Nose bridge center: {nose_bridge}", file=sys.stderr)
+        return left_pupil, right_pupil, nose_bridge
 
 def detect_apriltags(image):
     """Detect AprilTags using the proper pupil-apriltags library"""
@@ -207,7 +227,7 @@ def process_image(image_path):
         
         # STEP 2: Only proceed to face detection if AprilTag is found
         print("Detecting face landmarks...", file=sys.stderr)
-        left_eye, right_eye = detect_face_landmarks(image)
+        left_eye, right_eye, nose_bridge = detect_face_landmarks(image)
         
         # Debug: Print pupil coordinates
         print(f"Detected pupils - Left: {left_eye}, Right: {right_eye}", file=sys.stderr)
@@ -237,19 +257,35 @@ def process_image(image_path):
         pixel_distance = np.sqrt((right_eye[0] - left_eye[0])**2 + (right_eye[1] - left_eye[1])**2)
         pd_mm = pixel_distance * pixel_scale_factor
         
+        # Calculate monocular PD distances (from nose bridge center to each pupil)
+        left_monocular_distance_pixels = np.sqrt((left_eye[0] - nose_bridge[0])**2 + (left_eye[1] - nose_bridge[1])**2)
+        right_monocular_distance_pixels = np.sqrt((right_eye[0] - nose_bridge[0])**2 + (right_eye[1] - nose_bridge[1])**2)
+        
+        # Convert monocular distances to millimeters
+        left_monocular_pd_mm = left_monocular_distance_pixels * pixel_scale_factor
+        right_monocular_pd_mm = right_monocular_distance_pixels * pixel_scale_factor
+        
         # STEP 4: Create processed image with accurate overlays
         processed_image = image.copy()
         
         # Ensure coordinates are integers
         left_eye = (int(left_eye[0]), int(left_eye[1]))
         right_eye = (int(right_eye[0]), int(right_eye[1]))
+        nose_bridge = (int(nose_bridge[0]), int(nose_bridge[1]))
         
         # Draw small, thin pupil markers that don't obscure the pupils
         cv2.circle(processed_image, left_eye, 2, (0, 255, 0), 1)
         cv2.circle(processed_image, right_eye, 2, (0, 255, 0), 1)
         
+        # Draw nose bridge center
+        cv2.circle(processed_image, nose_bridge, 3, (255, 0, 255), 2)  # Magenta for nose bridge
+        
         # Draw line between pupils with better visibility
         cv2.line(processed_image, left_eye, right_eye, (0, 255, 0), 3)
+        
+        # Draw monocular PD lines
+        cv2.line(processed_image, nose_bridge, left_eye, (0, 255, 255), 1)  # Yellow for left monocular
+        cv2.line(processed_image, nose_bridge, right_eye, (0, 255, 255), 1)  # Yellow for right monocular
         
         # Draw AprilTag outline using actual detected corners
         tag_corners_int = tag_corners.astype(int)
@@ -269,12 +305,16 @@ def process_image(image_path):
         # Add measurement text
         cv2.putText(processed_image, f"PD: {pd_mm:.1f}mm", 
                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(processed_image, f"Left monocular PD: {left_monocular_pd_mm:.1f}mm", 
+                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        cv2.putText(processed_image, f"Right monocular PD: {right_monocular_pd_mm:.1f}mm", 
+                   (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         cv2.putText(processed_image, "AprilTag Detected", 
-                   (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                   (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         cv2.putText(processed_image, "Eyes Detected", 
-                   (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                   (10, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         cv2.putText(processed_image, f"Scale: {pixel_scale_factor:.3f}mm/px", 
-                   (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                   (10, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         # Save processed image
         processed_dir = "server/processed_images"
@@ -295,12 +335,16 @@ def process_image(image_path):
         # Validate and ensure integer coordinates
         left_eye_coords = (int(round(left_eye[0])), int(round(left_eye[1])))
         right_eye_coords = (int(round(right_eye[0])), int(round(right_eye[1])))
+        nose_bridge_coords = (int(round(nose_bridge[0])), int(round(nose_bridge[1])))
         
         return {
             "success": True,
             "pd_value": round(pd_mm, 1),
             "left_pupil": {"x": left_eye_coords[0], "y": left_eye_coords[1]},
             "right_pupil": {"x": right_eye_coords[0], "y": right_eye_coords[1]},
+            "nose_bridge": {"x": nose_bridge_coords[0], "y": nose_bridge_coords[1]},
+            "left_monocular_pd": round(left_monocular_pd_mm, 1),
+            "right_monocular_pd": round(right_monocular_pd_mm, 1),
             "pixel_distance": round(float(pixel_distance), 1),
             "scale_factor": round(pixel_scale_factor, 3),
             "processed_image_path": processed_filename,

@@ -4,16 +4,15 @@
 
 This is a full-stack web application designed to measure pupillary distance (PD) from uploaded images using computer vision. The application combines a React frontend with an Express.js backend, utilizing Python-based image processing with OpenCV Haar cascades and robust AprilTag pattern detection for accurate measurements.
 
-## Recent Changes (July 20, 2025)
+## Recent Changes (July 21, 2025)
 
-✓ **Migration Complete** - Successfully migrated from Replit Agent to standard Replit environment
-✓ **Python Dependencies Fixed** - Installed opencv-python, mediapipe, pupil-apriltags, numpy
-✓ **Setup Documentation** - Created setup_python_env.sh and SETUP_INSTRUCTIONS.md for future imports
-✓ **Computer Vision Verified** - AprilTag detection working with 76.2% confidence, PD measurement at 84.8mm
-✓ **Full Stack Functional** - Image uploads, processing, and results display all operational
-✓ **Manual Ocular Height Calculator** - Added precise image editor with zoom functionality for manual frame line placement
-✓ **Enhanced UI Components** - Created ImageEditor component with pan, zoom, and precise line positioning tools
-✓ **Backend API Extended** - Added /api/measurements/:id/manual-ocular-height endpoint for custom calculations
+✓ **Replit Migration Complete** - Successfully migrated from Replit Agent to standard Replit environment
+✓ **Python Packages Verified** - All computer vision dependencies (opencv-python, mediapipe, pupil-apriltags, numpy) working
+✓ **Monocular PD Feature Added** - Enhanced PD measurement to include left and right monocular PD calculations
+✓ **Nose Bridge Detection** - Implemented nose bridge center detection using MediaPipe facial landmarks
+✓ **Database Schema Updated** - Added noseBridgeX, noseBridgeY, leftMonocularPd, rightMonocularPd fields
+✓ **Complete API Integration** - Full stack now returns both total PD and individual monocular PD measurements
+✓ **Visual Enhancements** - Processed images now show nose bridge marker and monocular PD lines
 
 ## Previous Changes (July 19, 2025)
 
