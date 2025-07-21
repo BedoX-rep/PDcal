@@ -112,6 +112,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }
 
+          // Get public URL for the uploaded image
+          let publicImageUrl = null;
+          if (processedImageUrl) {
+            const { data: urlData } = supabaseAdmin.storage
+              .from('measurement-images')
+              .getPublicUrl(processedImageUrl);
+            publicImageUrl = urlData.publicUrl;
+          }
+
           // Save to Supabase with user authentication context
           const { data: measurement, error } = await supabase
             .from('measurements')
@@ -129,6 +138,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               pixel_distance: parseFloat(result.pixel_distance),
               scale_factor: parseFloat(result.scale_factor),
               processed_image_url: processedImageUrl,
+              image_url: publicImageUrl,
+              is_saved: false,
             })
             .select()
             .single();
@@ -164,10 +175,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const { data: measurements, error } = await supabaseAdmin
+      // Get query parameter for filtering saved measurements
+      const { saved } = req.query;
+      let query = supabaseAdmin
         .from('measurements')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user.id);
+
+      // Filter by is_saved if specified
+      if (saved === 'true') {
+        query = query.eq('is_saved', true);
+      } else if (saved === 'false') {
+        query = query.eq('is_saved', false);
+      }
+
+      const { data: measurements, error } = await query
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -218,11 +240,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const id = parseInt(req.params.id);
-      const { measurementName } = req.body;
+      const { measurementName, isSaved } = req.body;
 
       const updateData: any = {};
       if (measurementName !== undefined) {
         updateData.measurement_name = measurementName;
+      }
+      if (isSaved !== undefined) {
+        updateData.is_saved = isSaved;
       }
 
       if (Object.keys(updateData).length === 0) {
@@ -245,6 +270,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(measurement);
     } catch (error) {
       console.error('Update measurement error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Save measurement endpoint (set is_saved to true)
+  app.post("/api/measurements/:id/save", async (req, res) => {
+    try {
+      const user = await getUserFromRequest(req);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const id = parseInt(req.params.id);
+      const { data: measurement, error } = await supabaseAdmin
+        .from('measurements')
+        .update({ is_saved: true })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error || !measurement) {
+        console.error('Supabase error:', error);
+        return res.status(404).json({ error: "Measurement not found or save failed" });
+      }
+
+      res.json({ success: true, measurement });
+    } catch (error) {
+      console.error('Save measurement error:', error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
