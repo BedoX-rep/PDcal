@@ -124,10 +124,11 @@ export default function Home() {
   });
 
   const manualOcularHeightMutation = useMutation({
-    mutationFn: async (data: { measurementId: number; frameBottomY: number; zoomLevel: number; imageWidth: number; imageHeight: number }) => {
+    mutationFn: async (data: { measurementId: number; leftFrameBottomY: number; rightFrameBottomY: number; zoomLevel: number; imageWidth: number; imageHeight: number }) => {
       try {
         const response = await apiRequest('POST', `/api/measurements/${data.measurementId}/manual-ocular-height`, {
-          frameBottomY: data.frameBottomY,
+          leftFrameBottomY: data.leftFrameBottomY,
+          rightFrameBottomY: data.rightFrameBottomY,
           zoomLevel: data.zoomLevel,
           imageWidth: data.imageWidth,
           imageHeight: data.imageHeight
@@ -211,11 +212,12 @@ export default function Home() {
     setShowImageEditor(true);
   };
 
-  const handleImageEditorSave = (lineY: number, zoomLevel: number, imageWidth: number, imageHeight: number) => {
+  const handleImageEditorSave = (leftLineY: number, rightLineY: number, zoomLevel: number, imageWidth: number, imageHeight: number) => {
     if (processingResult?.measurement?.id) {
       manualOcularHeightMutation.mutate({
         measurementId: processingResult.measurement.id,
-        frameBottomY: lineY,
+        leftFrameBottomY: leftLineY,
+        rightFrameBottomY: rightLineY,
         zoomLevel,
         imageWidth,
         imageHeight

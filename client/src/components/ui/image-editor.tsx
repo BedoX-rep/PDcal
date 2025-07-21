@@ -5,7 +5,7 @@ import { ZoomIn, ZoomOut, RotateCcw, Save } from 'lucide-react';
 
 interface ImageEditorProps {
   imageSrc: string;
-  onSave: (lineY: number, zoomLevel: number, imageWidth: number, imageHeight: number) => void;
+  onSave: (leftLineY: number, rightLineY: number, zoomLevel: number, imageWidth: number, imageHeight: number) => void;
   onCancel: () => void;
   leftPupil: { x: number; y: number };
   rightPupil: { x: number; y: number };
@@ -15,8 +15,9 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [lineY, setLineY] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [leftLineY, setLeftLineY] = useState<number | null>(null);
+  const [rightLineY, setRightLineY] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState<'left' | 'right' | null>(null);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
@@ -34,8 +35,10 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
       setImageDimensions({ width: img.width, height: img.height });
       setImageLoaded(true);
       
-      // Set initial line position to 80% down the image (common frame bottom position)
-      setLineY(Math.floor(img.height * 0.8));
+      // Set initial line positions to 80% down the image (common frame bottom position)
+      const initialY = Math.floor(img.height * 0.8);
+      setLeftLineY(initialY);
+      setRightLineY(initialY);
       
       drawCanvas();
     };
@@ -46,7 +49,7 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
     if (imageLoaded) {
       drawCanvas();
     }
-  }, [zoomLevel, lineY, panOffset, imageLoaded]);
+  }, [zoomLevel, leftLineY, rightLineY, panOffset, imageLoaded]);
 
   const drawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -90,38 +93,52 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
     ctx.arc(rightX, rightY, 5, 0, 2 * Math.PI);
     ctx.stroke();
 
-    // Draw horizontal line if set
-    if (lineY !== null) {
-      const scaledLineY = imgY + (lineY * zoomLevel);
+    // Draw left eye frame line (red)
+    if (leftLineY !== null) {
+      const scaledLeftLineY = imgY + (leftLineY * zoomLevel);
       ctx.strokeStyle = '#ff0000';
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
       ctx.beginPath();
-      ctx.moveTo(imgX, scaledLineY);
-      ctx.lineTo(imgX + imgWidth, scaledLineY);
+      ctx.moveTo(imgX, scaledLeftLineY);
+      ctx.lineTo(leftX + 50, scaledLeftLineY); // Extend line to left of left pupil
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Draw vertical lines from pupils to frame line
+      // Draw vertical line from left pupil to left frame line
       ctx.strokeStyle = '#ffff00';
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
-      
-      // Left eye vertical line
       ctx.beginPath();
       ctx.moveTo(leftX, leftY);
-      ctx.lineTo(leftX, scaledLineY);
+      ctx.lineTo(leftX, scaledLeftLineY);
       ctx.stroke();
-      
-      // Right eye vertical line
-      ctx.beginPath();
-      ctx.moveTo(rightX, rightY);
-      ctx.lineTo(rightX, scaledLineY);
-      ctx.stroke();
-      
       ctx.setLineDash([]);
     }
-  }, [imageLoaded, zoomLevel, lineY, panOffset, imageDimensions, leftPupil, rightPupil]);
+
+    // Draw right eye frame line (blue)
+    if (rightLineY !== null) {
+      const scaledRightLineY = imgY + (rightLineY * zoomLevel);
+      ctx.strokeStyle = '#0000ff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(rightX - 50, scaledRightLineY); // Start line to right of right pupil
+      ctx.lineTo(imgX + imgWidth, scaledRightLineY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Draw vertical line from right pupil to right frame line
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(rightX, rightY);
+      ctx.lineTo(rightX, scaledRightLineY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }, [imageLoaded, zoomLevel, leftLineY, rightLineY, panOffset, imageDimensions, leftPupil, rightPupil]);
 
   const getCanvasCoordinates = (clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
@@ -151,11 +168,23 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
       setIsPanning(true);
       setLastPanPoint({ x: e.clientX, y: e.clientY });
     } else {
-      // Line placement mode
+      // Line placement mode - determine which eye is closer
       if (coords.x >= 0 && coords.x <= imageDimensions.width && 
           coords.y >= 0 && coords.y <= imageDimensions.height) {
-        setLineY(coords.y);
-        setIsDragging(true);
+        
+        // Determine which line to adjust based on click position
+        const leftPupilDistance = Math.abs(coords.x - leftPupil.x);
+        const rightPupilDistance = Math.abs(coords.x - rightPupil.x);
+        
+        if (leftPupilDistance < rightPupilDistance) {
+          // Closer to left pupil, adjust left line
+          setLeftLineY(coords.y);
+          setIsDragging('left');
+        } else {
+          // Closer to right pupil, adjust right line
+          setRightLineY(coords.y);
+          setIsDragging('right');
+        }
       }
     }
   };
@@ -169,13 +198,17 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
     } else if (isDragging) {
       const coords = getCanvasCoordinates(e.clientX, e.clientY);
       if (coords.y >= 0 && coords.y <= imageDimensions.height) {
-        setLineY(coords.y);
+        if (isDragging === 'left') {
+          setLeftLineY(coords.y);
+        } else if (isDragging === 'right') {
+          setRightLineY(coords.y);
+        }
       }
     }
   };
 
   const handleMouseUp = () => {
-    setIsDragging(false);
+    setIsDragging(null);
     setIsPanning(false);
   };
 
@@ -190,12 +223,14 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
   const handleReset = () => {
     setZoomLevel(1);
     setPanOffset({ x: 0, y: 0 });
-    setLineY(Math.floor(imageDimensions.height * 0.8));
+    const initialY = Math.floor(imageDimensions.height * 0.8);
+    setLeftLineY(initialY);
+    setRightLineY(initialY);
   };
 
   const handleSave = () => {
-    if (lineY !== null) {
-      onSave(lineY, zoomLevel, imageDimensions.width, imageDimensions.height);
+    if (leftLineY !== null && rightLineY !== null) {
+      onSave(leftLineY, rightLineY, zoomLevel, imageDimensions.width, imageDimensions.height);
     }
   };
 
@@ -204,7 +239,7 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
       <CardHeader>
         <CardTitle>Manual Ocular Height Calculator</CardTitle>
         <div className="text-sm text-muted-foreground">
-          Click and drag to position the red line at the bottom of the frame. 
+          Click and drag to position frame lines at the bottom of each lens. Red line for left eye, blue line for right eye.
           Hold Shift + drag to pan. Green circles show pupil positions.
         </div>
       </CardHeader>
@@ -244,9 +279,14 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
           />
         </div>
 
-        {lineY !== null && (
-          <div className="text-sm text-muted-foreground">
-            Frame bottom line positioned at Y: {lineY.toFixed(1)}px
+        {(leftLineY !== null || rightLineY !== null) && (
+          <div className="text-sm text-muted-foreground space-y-1">
+            {leftLineY !== null && (
+              <div>Left eye (red line) positioned at Y: {leftLineY.toFixed(1)}px</div>
+            )}
+            {rightLineY !== null && (
+              <div>Right eye (blue line) positioned at Y: {rightLineY.toFixed(1)}px</div>
+            )}
           </div>
         )}
 
@@ -254,9 +294,9 @@ export function ImageEditor({ imageSrc, onSave, onCancel, leftPupil, rightPupil 
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={lineY === null}>
+          <Button onClick={handleSave} disabled={leftLineY === null || rightLineY === null}>
             <Save className="w-4 h-4 mr-2" />
-            Calculate Ocular Height
+            Calculate Ocular Heights
           </Button>
         </div>
       </CardContent>

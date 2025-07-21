@@ -205,10 +205,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/measurements/:id/manual-ocular-height", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { frameBottomY, zoomLevel, imageWidth, imageHeight } = req.body;
+      const { leftFrameBottomY, rightFrameBottomY, zoomLevel, imageWidth, imageHeight } = req.body;
       
-      if (!frameBottomY || !zoomLevel || !imageWidth || !imageHeight) {
-        return res.status(400).json({ error: "frameBottomY, zoomLevel, imageWidth, and imageHeight are required" });
+      if (!leftFrameBottomY || !rightFrameBottomY || !zoomLevel || !imageWidth || !imageHeight) {
+        return res.status(400).json({ error: "leftFrameBottomY, rightFrameBottomY, zoomLevel, imageWidth, and imageHeight are required" });
       }
 
       const measurement = await storage.getMeasurement(id);
@@ -221,10 +221,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Measurement must have pupil coordinates and scale factor" });
       }
 
-      // Calculate ocular heights based on manual line placement
-      // Distance from pupil center to frame bottom line in pixels
-      const leftOcularPixels = Math.abs(frameBottomY - measurement.leftPupilY);
-      const rightOcularPixels = Math.abs(frameBottomY - measurement.rightPupilY);
+      // Calculate ocular heights based on manual line placement for each eye separately
+      // Distance from pupil center to respective frame bottom line in pixels
+      const leftOcularPixels = Math.abs(leftFrameBottomY - measurement.leftPupilY);
+      const rightOcularPixels = Math.abs(rightFrameBottomY - measurement.rightPupilY);
       
       // Convert to millimeters using the scale factor from the measurement
       const leftOcularHeight = leftOcularPixels * measurement.scaleFactor;
@@ -241,7 +241,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         leftOcularHeight,
         rightOcularHeight,
         confidence: 1.0, // Manual placement is considered 100% confident
-        analysisNotes: `Manual measurement: Frame bottom line placed at Y=${frameBottomY.toFixed(1)}px. Left eye distance: ${leftOcularPixels.toFixed(1)}px (${leftOcularHeight.toFixed(1)}mm), Right eye distance: ${rightOcularPixels.toFixed(1)}px (${rightOcularHeight.toFixed(1)}mm). Scale factor: ${measurement.scaleFactor.toFixed(4)} mm/pixel.`
+        analysisNotes: `Manual measurement with separate frame lines: Left eye frame at Y=${leftFrameBottomY.toFixed(1)}px (distance: ${leftOcularPixels.toFixed(1)}px = ${leftOcularHeight.toFixed(1)}mm), Right eye frame at Y=${rightFrameBottomY.toFixed(1)}px (distance: ${rightOcularPixels.toFixed(1)}px = ${rightOcularHeight.toFixed(1)}mm). Scale factor: ${measurement.scaleFactor.toFixed(4)} mm/pixel.`
       };
 
       res.json({
