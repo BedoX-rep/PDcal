@@ -4,8 +4,7 @@ import multer from "multer";
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
-import { storage } from "./storage";
-import { insertMeasurementSchema } from "@shared/schema";
+import { supabaseAdmin, getUserFromRequest } from "./supabase";
 import { analyzeOcularHeight } from "./gemini";
 
 // Configure multer for file uploads

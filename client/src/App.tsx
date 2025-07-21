@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AuthPage } from "@/pages/auth";
-import Home from "@/pages/home";
+import Home from "@/pages/enhanced-home";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
 

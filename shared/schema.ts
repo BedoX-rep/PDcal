@@ -1,48 +1,43 @@
-import { pgTable, text, serial, integer, real, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, real, timestamp, uuid, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
-
 export const measurements = pgTable("measurements", {
   id: serial("id").primaryKey(),
-  originalFilename: text("original_filename").notNull(),
-  processedImagePath: text("processed_image_path"),
-  pdValue: real("pd_value"),
-  leftPupilX: real("left_pupil_x"),
-  leftPupilY: real("left_pupil_y"),
-  rightPupilX: real("right_pupil_x"),
-  rightPupilY: real("right_pupil_y"),
-  noseBridgeX: real("nose_bridge_x"),
-  noseBridgeY: real("nose_bridge_y"),
-  leftMonocularPd: real("left_monocular_pd"),
-  rightMonocularPd: real("right_monocular_pd"),
-  pixelDistance: real("pixel_distance"),
-  scaleFactor: real("scale_factor"),
-  apriltagDetected: integer("apriltag_detected").$type<boolean>(),
-  pupilsDetected: integer("pupils_detected").$type<boolean>(),
-  leftOcularHeight: real("left_ocular_height"),
-  rightOcularHeight: real("right_ocular_height"),
-  ocularHeightAnalyzed: integer("ocular_height_analyzed").$type<boolean>(),
-  errorMessage: text("error_message"),
+  userId: uuid("user_id").notNull(),
+  pdValue: decimal("pd_value", { precision: 5, scale: 2 }).notNull(),
+  leftPupilX: integer("left_pupil_x").notNull(),
+  leftPupilY: integer("left_pupil_y").notNull(),
+  rightPupilX: integer("right_pupil_x").notNull(),
+  rightPupilY: integer("right_pupil_y").notNull(),
+  noseBridgeX: integer("nose_bridge_x"),
+  noseBridgeY: integer("nose_bridge_y"),
+  leftMonocularPd: decimal("left_monocular_pd", { precision: 5, scale: 2 }),
+  rightMonocularPd: decimal("right_monocular_pd", { precision: 5, scale: 2 }),
+  pixelDistance: decimal("pixel_distance", { precision: 8, scale: 2 }).notNull(),
+  scaleFactor: decimal("scale_factor", { precision: 8, scale: 4 }).notNull(),
+  originalImageUrl: text("original_image_url"),
+  processedImageUrl: text("processed_image_url"),
+  leftOcularHeight: decimal("left_ocular_height", { precision: 5, scale: 2 }),
+  rightOcularHeight: decimal("right_ocular_height", { precision: 5, scale: 2 }),
+  ocularConfidence: decimal("ocular_confidence", { precision: 3, scale: 2 }),
+  analysisNotes: text("analysis_notes"),
   createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   id: true,
   createdAt: true,
+  updatedAt: true,
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export const updateMeasurementSchema = createInsertSchema(measurements).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+}).partial();
+
 export type InsertMeasurement = z.infer<typeof insertMeasurementSchema>;
+export type UpdateMeasurement = z.infer<typeof updateMeasurementSchema>;
 export type Measurement = typeof measurements.$inferSelect;
