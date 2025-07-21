@@ -174,9 +174,9 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
         </div>
         
         <ImageEditor
-          imageSrc={`/api/images/${measurement.processedImageUrl || ''}`}
-          leftPupil={{ x: Number(measurement.leftPupilX), y: Number(measurement.leftPupilY) }}
-          rightPupil={{ x: Number(measurement.rightPupilX), y: Number(measurement.rightPupilY) }}
+          imageSrc={`/api/images/${measurement.processed_image_url || ''}`}
+          leftPupil={{ x: Number(measurement.left_pupil_x), y: Number(measurement.left_pupil_y) }}
+          rightPupil={{ x: Number(measurement.right_pupil_x), y: Number(measurement.right_pupil_y) }}
           onSave={handleImageEditorSave}
           onCancel={() => setShowImageEditor(false)}
         />
@@ -205,7 +205,7 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
                 id="measurement-name"
                 value={measurementName}
                 onChange={(e) => setMeasurementName(e.target.value)}
-                placeholder={`${measurement.pdValue}mm PD - ${format(new Date(), 'MMM d, yyyy')}`}
+                placeholder={`${measurement.pd_value}mm PD - ${format(new Date(), 'MMM d, yyyy')}`}
               />
             </div>
             <div className="flex items-end">
@@ -239,7 +239,7 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
           <CardContent className="space-y-4">
             <div className="text-center">
               <div className="text-4xl font-bold text-primary mb-2">
-                {measurement.pdValue}mm
+                {measurement.pd_value}mm
               </div>
               <p className="text-muted-foreground">Total PD</p>
             </div>
@@ -249,25 +249,25 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Pixel Distance:</span>
-                <span className="text-sm font-medium">{measurement.pixelDistance}px</span>
+                <span className="text-sm font-medium">{measurement.pixel_distance}px</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-muted-foreground">Scale Factor:</span>
-                <span className="text-sm font-medium">{measurement.scaleFactor}</span>
+                <span className="text-sm font-medium">{measurement.scale_factor}</span>
               </div>
               
-              {measurement.leftMonocularPd && measurement.rightMonocularPd && (
+              {measurement.left_monocular_pd && measurement.right_monocular_pd && (
                 <>
                   <Separator />
                   <div className="space-y-2">
                     <h4 className="font-medium">Monocular PD</h4>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Left:</span>
-                      <span className="text-sm font-medium">{measurement.leftMonocularPd}mm</span>
+                      <span className="text-sm font-medium">{measurement.left_monocular_pd}mm</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-muted-foreground">Right:</span>
-                      <span className="text-sm font-medium">{measurement.rightMonocularPd}mm</span>
+                      <span className="text-sm font-medium">{measurement.right_monocular_pd}mm</span>
                     </div>
                   </div>
                 </>
@@ -288,19 +288,19 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {measurement.leftOcularHeight && measurement.rightOcularHeight ? (
+            {measurement.left_ocular_height && measurement.right_ocular_height ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="bg-green-100 text-green-800">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     Complete
                   </Badge>
-                  {measurement.analysisNotes && (
-                    <Badge variant="outline">{measurement.analysisNotes}</Badge>
+                  {measurement.analysis_notes && (
+                    <Badge variant="outline">{measurement.analysis_notes}</Badge>
                   )}
-                  {measurement.ocularConfidence && (
+                  {measurement.ocular_confidence && (
                     <Badge variant="outline">
-                      {Math.round(measurement.ocularConfidence * 100)}% confidence
+                      {Math.round(Number(measurement.ocular_confidence) * 100)}% confidence
                     </Badge>
                   )}
                 </div>
@@ -375,10 +375,10 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {measurement.processedImageUrl ? (
+          {measurement.processed_image_url ? (
             <div className="aspect-video bg-muted rounded-lg overflow-hidden">
               <img
-                src={`/api/images/${measurement.processedImageUrl}`}
+                src={`/api/images/${measurement.processed_image_url}`}
                 alt="Processed measurement"
                 className="w-full h-full object-contain"
                 onError={(e) => {
@@ -411,7 +411,7 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
           <div className="flex justify-between">
             <span className="text-muted-foreground">Created:</span>
             <span className="font-medium">
-              {measurement.createdAt && format(new Date(measurement.createdAt), 'MMM d, yyyy \'at\' h:mm a')}
+              {measurement.created_at && format(new Date(measurement.created_at), 'MMM d, yyyy \'at\' h:mm a')}
             </span>
           </div>
           {measurement.updatedAt && measurement.updatedAt !== measurement.createdAt && (
