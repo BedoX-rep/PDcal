@@ -116,19 +116,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const { data: measurement, error } = await supabase
             .from('measurements')
             .insert({
-              user_id: user.id,
-              pd_value: parseFloat(result.pd_value),
-              left_pupil_x: result.left_pupil.x,
-              left_pupil_y: result.left_pupil.y,
-              right_pupil_x: result.right_pupil.x,
-              right_pupil_y: result.right_pupil.y,
-              nose_bridge_x: result.nose_bridge?.x || null,
-              nose_bridge_y: result.nose_bridge?.y || null,
-              left_monocular_pd: result.left_monocular_pd ? parseFloat(result.left_monocular_pd) : null,
-              right_monocular_pd: result.right_monocular_pd ? parseFloat(result.right_monocular_pd) : null,
-              pixel_distance: parseFloat(result.pixel_distance),
-              scale_factor: parseFloat(result.scale_factor),
-              processed_image_url: processedImageUrl,
+              userId: user.id,
+              pdValue: parseFloat(result.pd_value),
+              leftPupilX: result.left_pupil.x,
+              leftPupilY: result.left_pupil.y,
+              rightPupilX: result.right_pupil.x,
+              rightPupilY: result.right_pupil.y,
+              noseBridgeX: result.nose_bridge?.x || null,
+              noseBridgeY: result.nose_bridge?.y || null,
+              leftMonocularPd: result.left_monocular_pd ? parseFloat(result.left_monocular_pd) : null,
+              rightMonocularPd: result.right_monocular_pd ? parseFloat(result.right_monocular_pd) : null,
+              pixelDistance: parseFloat(result.pixel_distance),
+              scaleFactor: parseFloat(result.scale_factor),
+              processedImageUrl: processedImageUrl,
             })
             .select()
             .single();
@@ -167,8 +167,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { data: measurements, error } = await supabaseAdmin
         .from('measurements')
         .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .eq('userId', user.id)
+        .order('createdAt', { ascending: false });
 
       if (error) {
         console.error('Supabase error:', error);
@@ -262,7 +262,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from('measurements')
         .delete()
         .eq('id', id)
-        .eq('user_id', user.id);
+        .eq('userId', user.id);
 
       if (error) {
         console.error('Supabase error:', error);
@@ -297,11 +297,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Measurement not found" });
       }
 
-      if (!measurement.processed_image_url) {
+      if (!measurement.processedImageUrl) {
         return res.status(400).json({ error: "No processed image available" });
       }
 
-      const imagePath = path.join(process.cwd(), measurement.processed_image_url);
+      const imagePath = path.join(process.cwd(), measurement.processedImageUrl);
       
       if (!fs.existsSync(imagePath)) {
         return res.status(404).json({ error: "Processed image file not found" });
@@ -313,14 +313,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { data: updatedMeasurement, error: updateError } = await supabaseAdmin
         .from('measurements')
         .update({
-          left_ocular_height: analysis.leftOcularHeight.toString(),
-          right_ocular_height: analysis.rightOcularHeight.toString(),
-          ocular_confidence: analysis.confidence.toString(),
-          analysis_notes: analysis.analysisNotes,
-          updated_at: new Date().toISOString()
+          leftOcularHeight: analysis.leftOcularHeight.toString(),
+          rightOcularHeight: analysis.rightOcularHeight.toString(),
+          ocularConfidence: analysis.confidence.toString(),
+          analysisNotes: analysis.analysisNotes,
+          updatedAt: new Date().toISOString()
         })
         .eq('id', id)
-        .eq('user_id', user.id)
+        .eq('userId', user.id)
         .select()
         .single();
 
@@ -364,9 +364,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Calculate ocular heights based on manual line placement
-      const leftPupilY = measurement.left_pupil_y;
-      const rightPupilY = measurement.right_pupil_y;
-      const scaleFactor = parseFloat(measurement.scale_factor);
+      const leftPupilY = measurement.leftPupilY;
+      const rightPupilY = measurement.rightPupilY;
+      const scaleFactor = parseFloat(measurement.scaleFactor);
 
       // Adjust coordinates based on zoom level
       const adjustedLeftFrameY = leftFrameBottomY / zoomLevel;
@@ -391,14 +391,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { data: updatedMeasurement, error: updateError } = await supabaseAdmin
         .from('measurements')
         .update({
-          left_ocular_height: analysis.leftOcularHeight.toString(),
-          right_ocular_height: analysis.rightOcularHeight.toString(),
-          ocular_confidence: analysis.confidence.toString(),
-          analysis_notes: analysis.analysisNotes,
-          updated_at: new Date().toISOString()
+          leftOcularHeight: analysis.leftOcularHeight.toString(),
+          rightOcularHeight: analysis.rightOcularHeight.toString(),
+          ocularConfidence: analysis.confidence.toString(),
+          analysisNotes: analysis.analysisNotes,
+          updatedAt: new Date().toISOString()
         })
         .eq('id', id)
-        .eq('user_id', user.id)
+        .eq('userId', user.id)
         .select()
         .single();
 
