@@ -84,8 +84,15 @@ export default function Home() {
 
   const ocularHeightMutation = useMutation({
     mutationFn: async (measurementId: number) => {
-      const response = await apiRequest('POST', `/api/measurements/${measurementId}/ocular-height`, {});
-      return response.json();
+      try {
+        const response = await apiRequest('POST', `/api/measurements/${measurementId}/ocular-height`, {});
+        return response.json();
+      } catch (error: any) {
+        if (error.message && error.message.includes('Unexpected token')) {
+          throw new Error('Measurement not found. Please upload a new image to get started.');
+        }
+        throw error;
+      }
     },
     onSuccess: (data: OcularHeightResult) => {
       setOcularHeightResult(data);
@@ -96,23 +103,43 @@ export default function Home() {
     },
     onError: (error: any) => {
       console.error('Ocular height analysis error:', error);
-      toast({
-        title: "Analysis Failed",
-        description: error.message || "Could not analyze ocular height",
-        variant: "destructive"
-      });
+      
+      if (error.message && (error.message.includes('Measurement not found') || error.message.includes('404'))) {
+        toast({
+          title: "Measurement Expired",
+          description: "Please upload a new image to use the AI ocular height analyzer.",
+          variant: "destructive"
+        });
+        setProcessingResult(null);
+        setOcularHeightResult(null);
+        setSelectedFile(null);
+      } else {
+        toast({
+          title: "Analysis Failed",
+          description: error.message || "Could not analyze ocular height",
+          variant: "destructive"
+        });
+      }
     }
   });
 
   const manualOcularHeightMutation = useMutation({
     mutationFn: async (data: { measurementId: number; frameBottomY: number; zoomLevel: number; imageWidth: number; imageHeight: number }) => {
-      const response = await apiRequest('POST', `/api/measurements/${data.measurementId}/manual-ocular-height`, {
-        frameBottomY: data.frameBottomY,
-        zoomLevel: data.zoomLevel,
-        imageWidth: data.imageWidth,
-        imageHeight: data.imageHeight
-      });
-      return response.json();
+      try {
+        const response = await apiRequest('POST', `/api/measurements/${data.measurementId}/manual-ocular-height`, {
+          frameBottomY: data.frameBottomY,
+          zoomLevel: data.zoomLevel,
+          imageWidth: data.imageWidth,
+          imageHeight: data.imageHeight
+        });
+        return response.json();
+      } catch (error: any) {
+        // Handle the case where the response might not be valid JSON
+        if (error.message && error.message.includes('Unexpected token')) {
+          throw new Error('Measurement not found. Please upload a new image to get started.');
+        }
+        throw error;
+      }
     },
     onSuccess: (data: OcularHeightResult) => {
       setOcularHeightResult(data);
@@ -124,11 +151,26 @@ export default function Home() {
     },
     onError: (error: any) => {
       console.error('Manual ocular height error:', error);
-      toast({
-        title: "Calculation Failed",
-        description: error.message || "Could not calculate ocular height from manual line placement",
-        variant: "destructive"
-      });
+      setShowImageEditor(false);
+      
+      // Check if this is a measurement not found error
+      if (error.message && (error.message.includes('Measurement not found') || error.message.includes('404'))) {
+        toast({
+          title: "Measurement Expired",
+          description: "Please upload a new image to use the manual ocular height calculator.",
+          variant: "destructive"
+        });
+        // Reset the UI to initial state
+        setProcessingResult(null);
+        setOcularHeightResult(null);
+        setSelectedFile(null);
+      } else {
+        toast({
+          title: "Calculation Failed",
+          description: error.message || "Could not calculate ocular height from manual line placement",
+          variant: "destructive"
+        });
+      }
     }
   });
 
