@@ -8,7 +8,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS measurements (
     id SERIAL PRIMARY KEY,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    measurement_name TEXT,
     pd_value DECIMAL(5,2) NOT NULL,
     left_pupil_x INTEGER NOT NULL,
     left_pupil_y INTEGER NOT NULL,
@@ -72,6 +71,3 @@ CREATE POLICY "Users can delete their own images" ON storage.objects
         bucket_id = 'measurement-images' 
         AND auth.uid()::text = (storage.foldername(name))[1]
     );
-
--- Add measurement_name column to existing measurements table (run this if table already exists)
--- ALTER TABLE measurements ADD COLUMN IF NOT EXISTS measurement_name TEXT;
