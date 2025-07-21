@@ -74,9 +74,15 @@ def detect_face_landmarks(image):
         left_pupil = get_pupil_center(LEFT_EYE_INDICES, face_landmarks, w, h)
         right_pupil = get_pupil_center(RIGHT_EYE_INDICES, face_landmarks, w, h)
         
-        # Calculate nose bridge center using nasal landmarks
-        NOSE_BRIDGE_INDICES = [168, 8, 9, 10, 151]  # Center nose landmarks between eyes
+        # Calculate nose bridge center using proper nasal landmarks
+        # Use the nasal bridge landmark which is the center point between eyes
+        NOSE_BRIDGE_INDICES = [6]  # Nasal bridge center - the key landmark between eyes
         nose_bridge = get_pupil_center(NOSE_BRIDGE_INDICES, face_landmarks, w, h)
+        
+        # If single landmark fails, use multiple nose bridge landmarks
+        if nose_bridge is None:
+            NOSE_BRIDGE_INDICES = [168, 8, 9, 10, 151]  # Multiple nose landmarks
+            nose_bridge = get_pupil_center(NOSE_BRIDGE_INDICES, face_landmarks, w, h)
         
         # Fallback to eye corner landmarks if iris detection fails
         if left_pupil is None or right_pupil is None:
@@ -257,9 +263,9 @@ def process_image(image_path):
         pixel_distance = np.sqrt((right_eye[0] - left_eye[0])**2 + (right_eye[1] - left_eye[1])**2)
         pd_mm = pixel_distance * pixel_scale_factor
         
-        # Calculate monocular PD distances (from nose bridge center to each pupil)
-        left_monocular_distance_pixels = np.sqrt((left_eye[0] - nose_bridge[0])**2 + (left_eye[1] - nose_bridge[1])**2)
-        right_monocular_distance_pixels = np.sqrt((right_eye[0] - nose_bridge[0])**2 + (right_eye[1] - nose_bridge[1])**2)
+        # Calculate monocular PD distances (HORIZONTAL distance only from nose bridge center to each pupil)
+        left_monocular_distance_pixels = abs(left_eye[0] - nose_bridge[0])  # Only horizontal distance
+        right_monocular_distance_pixels = abs(right_eye[0] - nose_bridge[0])  # Only horizontal distance
         
         # Convert monocular distances to millimeters
         left_monocular_pd_mm = left_monocular_distance_pixels * pixel_scale_factor
@@ -283,9 +289,13 @@ def process_image(image_path):
         # Draw line between pupils with better visibility
         cv2.line(processed_image, left_eye, right_eye, (0, 255, 0), 3)
         
-        # Draw monocular PD lines
-        cv2.line(processed_image, nose_bridge, left_eye, (0, 255, 255), 1)  # Yellow for left monocular
-        cv2.line(processed_image, nose_bridge, right_eye, (0, 255, 255), 1)  # Yellow for right monocular
+        # Draw monocular PD lines (horizontal only)
+        cv2.line(processed_image, (nose_bridge[0], left_eye[1]), left_eye, (0, 255, 255), 2)  # Yellow for left monocular
+        cv2.line(processed_image, (nose_bridge[0], right_eye[1]), right_eye, (0, 255, 255), 2)  # Yellow for right monocular
+        
+        # Draw red vertical line through nose bridge center
+        image_height = processed_image.shape[0]
+        cv2.line(processed_image, (nose_bridge[0], 0), (nose_bridge[0], image_height), (0, 0, 255), 2)  # Red vertical line
         
         # Draw AprilTag outline using actual detected corners
         tag_corners_int = tag_corners.astype(int)
