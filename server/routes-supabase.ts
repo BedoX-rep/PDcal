@@ -4,7 +4,7 @@ import multer from "multer";
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
-import { supabaseAdmin, getUserFromRequest } from "./supabase";
+import { supabaseAdmin, getUserFromRequest, createAuthenticatedClient } from "./supabase";
 import { analyzeOcularHeight } from "./gemini";
 
 // Configure multer for file uploads
@@ -25,11 +25,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Upload and process image endpoint
   app.post("/api/measurements", upload.single('image'), async (req, res) => {
     try {
-      // Get user from token
+      // Get user from token and create authenticated client
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        return res.status(401).json({ error: "Unauthorized - No auth header" });
+      }
+      
+      const token = authHeader.replace('Bearer ', '');
       const user = await getUserFromRequest(req);
       if (!user) {
-        return res.status(401).json({ error: "Unauthorized" });
+        return res.status(401).json({ error: "Unauthorized - Invalid token" });
       }
+      
+      const supabase = createAuthenticatedClient(token);
 
       if (!req.file) {
         return res.status(400).json({ error: "No image file provided" });
@@ -73,22 +81,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(400).json({ error: result.error || "Processing failed" });
           }
 
-          // Save to Supabase
-          const { data: measurement, error } = await supabaseAdmin
+          // Save to Supabase with user authentication context
+          const { data: measurement, error } = await supabase
             .from('measurements')
             .insert({
               user_id: user.id,
-              pd_value: result.pd_value.toString(),
+              pd_value: parseFloat(result.pd_value),
               left_pupil_x: result.left_pupil.x,
               left_pupil_y: result.left_pupil.y,
               right_pupil_x: result.right_pupil.x,
               right_pupil_y: result.right_pupil.y,
               nose_bridge_x: result.nose_bridge?.x || null,
               nose_bridge_y: result.nose_bridge?.y || null,
-              left_monocular_pd: result.left_monocular_pd?.toString() || null,
-              right_monocular_pd: result.right_monocular_pd?.toString() || null,
-              pixel_distance: result.pixel_distance.toString(),
-              scale_factor: result.scale_factor.toString(),
+              left_monocular_pd: result.left_monocular_pd ? parseFloat(result.left_monocular_pd) : null,
+              right_monocular_pd: result.right_monocular_pd ? parseFloat(result.right_monocular_pd) : null,
+              pixel_distance: parseFloat(result.pixel_distance),
+              scale_factor: parseFloat(result.scale_factor),
               processed_image_url: result.processed_image_path,
             })
             .select()
