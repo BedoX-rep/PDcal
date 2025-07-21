@@ -11,6 +11,9 @@ This is a full-stack web application designed to measure pupillary distance (PD)
 ✓ **Setup Documentation** - Created setup_python_env.sh and SETUP_INSTRUCTIONS.md for future imports
 ✓ **Computer Vision Verified** - AprilTag detection working with 76.2% confidence, PD measurement at 84.8mm
 ✓ **Full Stack Functional** - Image uploads, processing, and results display all operational
+✓ **Manual Ocular Height Calculator** - Added precise image editor with zoom functionality for manual frame line placement
+✓ **Enhanced UI Components** - Created ImageEditor component with pan, zoom, and precise line positioning tools
+✓ **Backend API Extended** - Added /api/measurements/:id/manual-ocular-height endpoint for custom calculations
 
 ## Previous Changes (July 19, 2025)
 
@@ -71,6 +74,12 @@ The application follows a monorepo pattern with shared TypeScript definitions:
 - **AprilTag Detection**: For scale reference and measurement accuracy
 - **Pupil Detection**: Extracts pupil coordinates for PD calculation
 - **Error Handling**: Comprehensive validation and error reporting
+
+### Manual Measurement Tools
+- **Interactive Image Editor**: Canvas-based editor with zoom (20%-500%) and pan functionality
+- **Precise Line Placement**: 1-pixel accuracy for frame bottom line positioning
+- **Real-time Calculations**: Automatic ocular height computation based on pupil-to-line distance
+- **Visual Feedback**: Pupil markers, measurement lines, and coordinate display
 
 ## Data Flow
 

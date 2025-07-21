@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { ImageEditor } from "@/components/ui/image-editor";
 import { 
   Eye, 
   Info, 
@@ -16,7 +17,8 @@ import {
   Ruler, 
   RotateCcw,
   Save,
-  FileText
+  FileText,
+  Edit
 } from "lucide-react";
 import type { Measurement } from "@shared/schema";
 
@@ -49,6 +51,7 @@ export default function Home() {
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
   const [ocularHeightResult, setOcularHeightResult] = useState<OcularHeightResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showImageEditor, setShowImageEditor] = useState(false);
   const { toast } = useToast();
 
   const uploadMutation = useMutation({
@@ -101,6 +104,34 @@ export default function Home() {
     }
   });
 
+  const manualOcularHeightMutation = useMutation({
+    mutationFn: async (data: { measurementId: number; frameBottomY: number; zoomLevel: number; imageWidth: number; imageHeight: number }) => {
+      const response = await apiRequest('POST', `/api/measurements/${data.measurementId}/manual-ocular-height`, {
+        frameBottomY: data.frameBottomY,
+        zoomLevel: data.zoomLevel,
+        imageWidth: data.imageWidth,
+        imageHeight: data.imageHeight
+      });
+      return response.json();
+    },
+    onSuccess: (data: OcularHeightResult) => {
+      setOcularHeightResult(data);
+      setShowImageEditor(false);
+      toast({
+        title: "Manual Ocular Height Calculated!",
+        description: `Left: ${data.ocularAnalysis.leftOcularHeight.toFixed(1)}mm, Right: ${data.ocularAnalysis.rightOcularHeight.toFixed(1)}mm`,
+      });
+    },
+    onError: (error: any) => {
+      console.error('Manual ocular height error:', error);
+      toast({
+        title: "Calculation Failed",
+        description: error.message || "Could not calculate ocular height from manual line placement",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
     setProcessingResult(null);
@@ -132,6 +163,26 @@ export default function Home() {
     if (processingResult?.measurement?.id) {
       ocularHeightMutation.mutate(processingResult.measurement.id);
     }
+  };
+
+  const handleManualOcularHeight = () => {
+    setShowImageEditor(true);
+  };
+
+  const handleImageEditorSave = (lineY: number, zoomLevel: number, imageWidth: number, imageHeight: number) => {
+    if (processingResult?.measurement?.id) {
+      manualOcularHeightMutation.mutate({
+        measurementId: processingResult.measurement.id,
+        frameBottomY: lineY,
+        zoomLevel,
+        imageWidth,
+        imageHeight
+      });
+    }
+  };
+
+  const handleImageEditorCancel = () => {
+    setShowImageEditor(false);
   };
 
   const downloadAprilTag = () => {
@@ -423,8 +474,21 @@ export default function Home() {
                         )}
                         {ocularHeightMutation.isPending ? "Analyzing Ocular Height..." : "Analyze Ocular Height with AI"}
                       </Button>
+                      <Button 
+                        variant="outline"
+                        className="w-full border-purple-200 text-purple-700 hover:bg-purple-50"
+                        onClick={handleManualOcularHeight}
+                        disabled={manualOcularHeightMutation.isPending}
+                      >
+                        {manualOcularHeightMutation.isPending ? (
+                          <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+                        ) : (
+                          <Edit className="mr-2 h-4 w-4" />
+                        )}
+                        {manualOcularHeightMutation.isPending ? "Calculating..." : "Manual Ocular Height Calculation"}
+                      </Button>
                       <p className="text-xs text-slate-500 text-center">
-                        Uses Gemini AI to measure vertical distance from pupil to frame bottom
+                        AI uses Gemini for automatic detection, Manual allows precise line placement with zoom
                       </p>
                     </div>
                   )}
@@ -487,6 +551,21 @@ export default function Home() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Image Editor Modal */}
+        {showImageEditor && processingResult && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] overflow-auto">
+              <ImageEditor
+                imageSrc={`/api/images/${processingResult.result.processed_image_path}`}
+                leftPupil={processingResult.result.left_pupil}
+                rightPupil={processingResult.result.right_pupil}
+                onSave={handleImageEditorSave}
+                onCancel={handleImageEditorCancel}
+              />
+            </div>
+          </div>
         )}
       </main>
 

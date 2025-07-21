@@ -201,6 +201,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Manual ocular height calculation
+  app.post("/api/measurements/:id/manual-ocular-height", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { frameBottomY, zoomLevel, imageWidth, imageHeight } = req.body;
+      
+      if (!frameBottomY || !zoomLevel || !imageWidth || !imageHeight) {
+        return res.status(400).json({ error: "frameBottomY, zoomLevel, imageWidth, and imageHeight are required" });
+      }
+
+      const measurement = await storage.getMeasurement(id);
+      
+      if (!measurement) {
+        return res.status(404).json({ error: "Measurement not found" });
+      }
+
+      if (!measurement.leftPupilX || !measurement.leftPupilY || !measurement.rightPupilX || !measurement.rightPupilY || !measurement.scaleFactor) {
+        return res.status(400).json({ error: "Measurement must have pupil coordinates and scale factor" });
+      }
+
+      // Calculate ocular heights based on manual line placement
+      // Distance from pupil center to frame bottom line in pixels
+      const leftOcularPixels = Math.abs(frameBottomY - measurement.leftPupilY);
+      const rightOcularPixels = Math.abs(frameBottomY - measurement.rightPupilY);
+      
+      // Convert to millimeters using the scale factor from the measurement
+      const leftOcularHeight = leftOcularPixels * measurement.scaleFactor;
+      const rightOcularHeight = rightOcularPixels * measurement.scaleFactor;
+
+      // Update measurement with manual ocular height data
+      const updatedMeasurement = await storage.updateMeasurement(id, {
+        leftOcularHeight,
+        rightOcularHeight,
+        ocularHeightAnalyzed: true,
+      });
+
+      const ocularAnalysis = {
+        leftOcularHeight,
+        rightOcularHeight,
+        confidence: 1.0, // Manual placement is considered 100% confident
+        analysisNotes: `Manual measurement: Frame bottom line placed at Y=${frameBottomY.toFixed(1)}px. Left eye distance: ${leftOcularPixels.toFixed(1)}px (${leftOcularHeight.toFixed(1)}mm), Right eye distance: ${rightOcularPixels.toFixed(1)}px (${rightOcularHeight.toFixed(1)}mm). Scale factor: ${measurement.scaleFactor.toFixed(4)} mm/pixel.`
+      };
+
+      res.json({
+        success: true,
+        measurement: updatedMeasurement,
+        ocularAnalysis,
+      });
+
+    } catch (error: any) {
+      console.error('Manual ocular height calculation error:', error);
+      res.status(500).json({ error: error.message || "Failed to calculate manual ocular height" });
+    }
+  });
+
   // Test endpoint for direct ocular height analysis
   app.post("/api/test-ocular-height", async (req, res) => {
     try {
