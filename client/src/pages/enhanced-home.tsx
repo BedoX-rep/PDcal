@@ -1,17 +1,35 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { FileUpload } from "@/components/ui/file-upload";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import MeasurementResults from "@/pages/measurement-results";
-import { Upload, RotateCcw, Target, LogOut, User, Eye, History, FileText, Zap, Info, CheckCircle, AlertTriangle } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
+import MeasurementResults from "./measurement-results";
+import { MeasurementHistory } from "./measurement-history";
+import { 
+  Eye, 
+  Info, 
+  Shield, 
+  CheckCircle, 
+  AlertTriangle, 
+  Ruler, 
+  RotateCcw,
+  Save,
+  FileText,
+  Edit,
+  LogOut,
+  User,
+  Upload,
+  History,
+  Target,
+  Zap
+} from "lucide-react";
 import type { Measurement } from "@shared/schema";
-
 interface ProcessingResult {
   success: boolean;
   measurement: Measurement;
