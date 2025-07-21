@@ -8,7 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import MeasurementResults from "@/pages/measurement-results";
-import { Upload, RotateCcw, Target, LogOut, User, Eye, History, FileText, Zap, Progress, Info, CheckCircle, AlertTriangle } from "lucide-react";
+import { Upload, RotateCcw, Target, LogOut, User, Eye, History, FileText, Zap, Info, CheckCircle, AlertTriangle } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import type { Measurement } from "@shared/schema";
 
 interface ProcessingResult {
