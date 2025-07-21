@@ -170,6 +170,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update measurement 
+  app.patch("/api/measurements/:id", async (req, res) => {
+    try {
+      const user = await getUserFromRequest(req);
+      if (!user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const id = parseInt(req.params.id);
+      const { measurementName } = req.body;
+
+      const updateData: any = {};
+      if (measurementName !== undefined) {
+        updateData.measurement_name = measurementName;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ error: "No valid fields to update" });
+      }
+
+      const { data: measurement, error } = await supabaseAdmin
+        .from('measurements')
+        .update(updateData)
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error || !measurement) {
+        console.error('Supabase error:', error);
+        return res.status(404).json({ error: "Measurement not found or update failed" });
+      }
+
+      res.json(measurement);
+    } catch (error) {
+      console.error('Update measurement error:', error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Delete measurement
   app.delete("/api/measurements/:id", async (req, res) => {
     try {

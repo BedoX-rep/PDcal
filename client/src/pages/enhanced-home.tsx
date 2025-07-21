@@ -9,12 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import { ImageEditor } from "@/components/ui/image-editor";
-import { MeasurementHistory } from "@/pages/measurement-history";
+import MeasurementResults from "./measurement-results";
+import { MeasurementHistory } from "./measurement-history";
 import { 
   Eye, 
   Info, 
-  Download, 
   Shield, 
   CheckCircle, 
   AlertTriangle, 
@@ -60,9 +59,7 @@ export default function EnhancedHome() {
   const [activeTab, setActiveTab] = useState("upload");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
-  const [ocularHeightResult, setOcularHeightResult] = useState<OcularHeightResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showImageEditor, setShowImageEditor] = useState(false);
   const { toast } = useToast();
   const { user, signOut } = useAuth();
 
