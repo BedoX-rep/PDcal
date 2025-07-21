@@ -9,12 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import { ImageEditor } from "@/components/ui/image-editor";
-import { MeasurementHistory } from "@/pages/measurement-history";
+import MeasurementResults from "./measurement-results";
+import { MeasurementHistory } from "./measurement-history";
 import { 
   Eye, 
   Info, 
-  Download, 
   Shield, 
   CheckCircle, 
   AlertTriangle, 
@@ -45,24 +44,11 @@ interface ProcessingResult {
   };
 }
 
-interface OcularHeightResult {
-  success: boolean;
-  measurement: Measurement;
-  ocularAnalysis: {
-    leftOcularHeight: number;
-    rightOcularHeight: number;
-    confidence: number;
-    analysisNotes: string;
-  };
-}
-
 export default function EnhancedHome() {
   const [activeTab, setActiveTab] = useState("upload");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
-  const [ocularHeightResult, setOcularHeightResult] = useState<OcularHeightResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showImageEditor, setShowImageEditor] = useState(false);
   const { toast } = useToast();
   const { user, signOut } = useAuth();
 
@@ -71,521 +57,273 @@ export default function EnhancedHome() {
       const formData = new FormData();
       formData.append('image', file);
       
-      const response = await apiRequest('POST', '/api/measurements', formData);
+      const response = await apiRequest("POST", "/api/measurements", formData);
       return response.json();
     },
-    onSuccess: (data: ProcessingResult) => {
+    onSuccess: (data) => {
       setProcessingResult(data);
-      setOcularHeightResult(null);
-      setError(null);
+      setActiveTab("results");
       toast({
         title: "Success!",
-        description: `Your PD has been measured: ${data.result.pd_value}mm`,
+        description: "Image processed successfully. PD measured: " + data.result.pd_value + "mm",
       });
     },
-    onError: (error: any) => {
-      console.error('Upload error:', error);
-      setError(error.message || "Failed to process image");
+    onError: (error) => {
+      setError(error.message);
       toast({
         title: "Processing Failed",
-        description: error.message || "Could not detect pupils or AprilTag in your photo",
-        variant: "destructive"
-      });
-    }
-  });
-
-  const ocularHeightMutation = useMutation({
-    mutationFn: async (measurementId: number) => {
-      try {
-        const response = await apiRequest('POST', `/api/measurements/${measurementId}/ocular-height`, {});
-        return response.json();
-      } catch (error: any) {
-        if (error.message && error.message.includes('Unexpected token')) {
-          throw new Error('Measurement not found. Please upload a new image to get started.');
-        }
-        throw error;
-      }
-    },
-    onSuccess: (data: OcularHeightResult) => {
-      setOcularHeightResult(data);
-      toast({
-        title: "Ocular Height Analysis Complete!",
-        description: `Left: ${data.ocularAnalysis.leftOcularHeight.toFixed(1)}mm, Right: ${data.ocularAnalysis.rightOcularHeight.toFixed(1)}mm`,
+        description: error.message,
+        variant: "destructive",
       });
     },
-    onError: (error: any) => {
-      console.error('Ocular height analysis error:', error);
-      
-      if (error.message && (error.message.includes('Measurement not found') || error.message.includes('404'))) {
-        toast({
-          title: "Measurement Expired",
-          description: "Please upload a new image to use the AI ocular height analyzer.",
-          variant: "destructive"
-        });
-        setProcessingResult(null);
-        setOcularHeightResult(null);
-        setSelectedFile(null);
-      } else {
-        toast({
-          title: "Analysis Failed",
-          description: error.message || "Could not analyze ocular height",
-          variant: "destructive"
-        });
-      }
-    }
-  });
-
-  const manualOcularHeightMutation = useMutation({
-    mutationFn: async (data: { measurementId: number; leftFrameBottomY: number; rightFrameBottomY: number; zoomLevel: number; imageWidth: number; imageHeight: number }) => {
-      try {
-        const response = await apiRequest('POST', `/api/measurements/${data.measurementId}/manual-ocular-height`, {
-          leftFrameBottomY: data.leftFrameBottomY,
-          rightFrameBottomY: data.rightFrameBottomY,
-          zoomLevel: data.zoomLevel,
-          imageWidth: data.imageWidth,
-          imageHeight: data.imageHeight
-        });
-        return response.json();
-      } catch (error: any) {
-        if (error.message && error.message.includes('Unexpected token')) {
-          throw new Error('Measurement not found. Please upload a new image to get started.');
-        }
-        throw error;
-      }
-    },
-    onSuccess: (data: OcularHeightResult) => {
-      setOcularHeightResult(data);
-      setShowImageEditor(false);
-      toast({
-        title: "Manual Ocular Height Calculated!",
-        description: `Left: ${data.ocularAnalysis.leftOcularHeight.toFixed(1)}mm, Right: ${data.ocularAnalysis.rightOcularHeight.toFixed(1)}mm`,
-      });
-    },
-    onError: (error: any) => {
-      console.error('Manual ocular height error:', error);
-      setShowImageEditor(false);
-      
-      if (error.message && (error.message.includes('Measurement not found') || error.message.includes('404'))) {
-        toast({
-          title: "Measurement Expired",
-          description: "Please upload a new image to use the manual ocular height calculator.",
-          variant: "destructive"
-        });
-        setProcessingResult(null);
-        setOcularHeightResult(null);
-        setSelectedFile(null);
-      } else {
-        toast({
-          title: "Calculation Failed",
-          description: error.message || "Could not calculate ocular height from manual line placement",
-          variant: "destructive"
-        });
-      }
-    }
   });
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file);
-    setProcessingResult(null);
-    setOcularHeightResult(null);
     setError(null);
   };
 
-  const handleRemoveFile = () => {
-    setSelectedFile(null);
-    setProcessingResult(null);
-    setOcularHeightResult(null);
-    setError(null);
+  const handleUpload = () => {
+    if (!selectedFile) return;
+    uploadMutation.mutate(selectedFile);
   };
 
-  const handleAnalyze = () => {
-    if (selectedFile) {
-      uploadMutation.mutate(selectedFile);
-    }
-  };
-
-  const handleNewMeasurement = () => {
+  const handleStartOver = () => {
     setSelectedFile(null);
     setProcessingResult(null);
-    setOcularHeightResult(null);
     setError(null);
     setActiveTab("upload");
   };
 
-  const handleAnalyzeOcularHeight = () => {
-    if (processingResult?.measurement?.id) {
-      ocularHeightMutation.mutate(processingResult.measurement.id);
-    }
-  };
-
-  const handleManualOcularHeight = () => {
-    setShowImageEditor(true);
-  };
-
-  const handleImageEditorSave = (leftLineY: number, rightLineY: number, zoomLevel: number, imageWidth: number, imageHeight: number) => {
-    if (processingResult?.measurement?.id) {
-      manualOcularHeightMutation.mutate({
-        measurementId: processingResult.measurement.id,
-        leftFrameBottomY: leftLineY,
-        rightFrameBottomY: rightLineY,
-        zoomLevel,
-        imageWidth,
-        imageHeight
-      });
-    }
-  };
-
-  const handleImageEditorCancel = () => {
-    setShowImageEditor(false);
-  };
-
-  const downloadAprilTag = () => {
-    const link = document.createElement('a');
-    link.href = '/src/assets/apriltag.svg';
-    link.download = 'apriltag_50mm.svg';
-    link.click();
-    
+  const handleSaveComplete = () => {
+    // Refresh history and stay on results tab
     toast({
-      title: "Download Started",
-      description: "AprilTag SVG downloaded. Print at actual size (50mm x 50mm).",
+      title: "Saved!",
+      description: "Measurement has been saved to your history.",
     });
   };
 
-  if (showImageEditor && processingResult) {
+  if (!user) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-4">
-            <Button 
-              variant="outline" 
-              onClick={handleImageEditorCancel}
-              className="flex items-center space-x-2"
-            >
-              <RotateCcw className="h-4 w-4" />
-              <span>Back to Results</span>
-            </Button>
-          </div>
-          <ImageEditor
-            imageSrc={`/api/images/${processingResult.result.processed_image_path.split('/').pop() || ''}`}
-            leftPupil={processingResult.result.left_pupil}
-            rightPupil={processingResult.result.right_pupil}
-            onSave={handleImageEditorSave}
-            onCancel={handleImageEditorCancel}
-          />
-        </div>
+      <div className="container mx-auto p-6">
+        <div className="text-center">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Enhanced Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/60 shadow-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      {/* Header */}
+      <div className="bg-white dark:bg-gray-800 shadow-sm border-b">
+        <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
-                <Eye className="text-white text-xl" />
+              <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg">
+                <Eye className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                  PD Measurement Pro
+                  PD Measurement Tool
                 </h1>
-                <p className="text-sm text-slate-600">Precise Pupillary Distance Analysis</p>
+                <p className="text-sm text-muted-foreground">Professional pupillary distance analysis</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-slate-600">
-                <Shield className="h-4 w-4 text-green-600" />
-                <span>Secure & Private</span>
+              <div className="flex items-center space-x-2 text-sm">
+                <User className="h-4 w-4" />
+                <span className="font-medium">{user.email}</span>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-2 text-sm text-slate-700">
-                  <User className="h-4 w-4" />
-                  <span className="font-medium">{user?.email}</span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={signOut}
-                  className="flex items-center space-x-1 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Sign Out</span>
-                </Button>
-              </div>
+              <Button variant="outline" size="sm" onClick={signOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="upload" className="flex items-center space-x-2">
+      {/* Main Content */}
+      <div className="container mx-auto p-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="upload" className="flex items-center gap-2">
               <Upload className="h-4 w-4" />
-              <span>New Measurement</span>
+              Upload & Process
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center space-x-2">
+            <TabsTrigger value="results" className="flex items-center gap-2" disabled={!processingResult}>
+              <Target className="h-4 w-4" />
+              Measurement Results
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
               <History className="h-4 w-4" />
-              <span>My Measurements</span>
+              Measurement History
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="upload" className="space-y-8">
-            {/* Enhanced Instructions */}
-            <Card className="border-0 bg-gradient-to-r from-blue-50 to-purple-50 shadow-lg">
-              <CardContent className="pt-6">
-                <div className="flex items-start space-x-4">
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Target className="h-6 w-6 text-blue-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-xl font-semibold text-slate-800 mb-3">
-                      How to Get Accurate PD Measurements
-                    </h3>
-                    <div className="grid md:grid-cols-3 gap-4 text-sm">
-                      <div className="flex items-start space-x-2">
-                        <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">1</div>
-                        <div>
-                          <p className="font-medium text-slate-700">Position yourself</p>
-                          <p className="text-slate-600">Hold camera at arm's length, eyes level with lens</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-2">
-                        <div className="w-6 h-6 bg-purple-500 text-white rounded-full flex items-center justify-center text-xs font-bold">2</div>
-                        <div>
-                          <p className="font-medium text-slate-700">Include AprilTag</p>
-                          <p className="text-slate-600">Place the 50mm AprilTag near your face for scale</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-2">
-                        <div className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">3</div>
-                        <div>
-                          <p className="font-medium text-slate-700">Good lighting</p>
-                          <p className="text-slate-600">Use natural light, avoid shadows on your face</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={downloadAprilTag}
-                        className="flex items-center space-x-2"
-                      >
-                        <Download className="h-4 w-4" />
-                        <span>Download AprilTag (50mm)</span>
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Enhanced Upload Section */}
-            <Card className="shadow-lg border-0">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2 text-xl">
-                  <Zap className="h-5 w-5 text-yellow-500" />
-                  <span>Upload Your Photo</span>
+          {/* Upload Tab */}
+          <TabsContent value="upload" className="space-y-6">
+            <Card>
+              <CardHeader className="text-center space-y-2">
+                <CardTitle className="flex items-center justify-center gap-2 text-2xl">
+                  <Upload className="h-6 w-6" />
+                  Upload Image for PD Measurement
                 </CardTitle>
-                <CardDescription>
-                  Select a clear frontal photo with good lighting and the AprilTag visible
+                <CardDescription className="text-base">
+                  Upload a clear photo with an AprilTag reference for accurate measurement
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {!selectedFile ? (
-                  <FileUpload 
-                    selectedFile={selectedFile}
-                    onFileSelect={handleFileSelect}
-                    onRemoveFile={handleRemoveFile}
-                  />
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-slate-800">{selectedFile.name}</p>
-                          <p className="text-sm text-slate-500">
-                            {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
-                          </p>
-                        </div>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={handleRemoveFile}>
-                        Remove
-                      </Button>
-                    </div>
-
-                    <div className="flex space-x-3">
-                      <Button
-                        onClick={handleAnalyze}
-                        disabled={uploadMutation.isPending}
-                        className="flex-1 h-12 text-base font-medium"
-                      >
-                        {uploadMutation.isPending ? (
-                          <div className="flex items-center space-x-2">
-                            <div className="animate-spin h-4 w-4 border-b-2 border-white rounded-full" />
-                            <span>Processing...</span>
+                {/* Upload Area */}
+                <FileUpload onFileSelect={handleFileSelect} />
+                
+                {/* Selected File Display */}
+                {selectedFile && (
+                  <Card className="border-green-200 bg-green-50/50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-green-100 rounded-lg">
+                            <FileText className="h-5 w-5 text-green-600" />
                           </div>
-                        ) : (
-                          <div className="flex items-center space-x-2">
-                            <Ruler className="h-4 w-4" />
-                            <span>Analyze PD</span>
+                          <div>
+                            <p className="font-medium">{selectedFile.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
                           </div>
-                        )}
-                      </Button>
-                    </div>
-
-                    {uploadMutation.isPending && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm text-slate-600">
-                          <span>Processing image...</span>
-                          <span>This may take a few seconds</span>
                         </div>
-                        <Progress value={50} className="h-2" />
+                        <Button 
+                          onClick={handleUpload}
+                          disabled={uploadMutation.isPending}
+                          size="lg"
+                        >
+                          {uploadMutation.isPending ? (
+                            <>
+                              <Zap className="h-4 w-4 mr-2 animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="h-4 w-4 mr-2" />
+                              Analyze Image
+                            </>
+                          )}
+                        </Button>
                       </div>
-                    )}
-                  </div>
+                    </CardContent>
+                  </Card>
                 )}
 
+                {/* Processing Progress */}
+                {uploadMutation.isPending && (
+                  <Card className="border-blue-200 bg-blue-50/50">
+                    <CardContent className="pt-6">
+                      <div className="space-y-4">
+                        <div className="flex items-center space-x-2">
+                          <Zap className="h-5 w-5 text-blue-600 animate-pulse" />
+                          <span className="font-medium">Processing your image...</span>
+                        </div>
+                        <Progress value={75} className="h-2" />
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <p>• Detecting facial landmarks and pupils</p>
+                          <p>• Looking for AprilTag reference markers</p>
+                          <p>• Calculating accurate measurements</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Error Display */}
                 {error && (
-                  <div className="flex items-start space-x-3 p-4 bg-red-50 rounded-lg border border-red-200">
-                    <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium text-red-800">Processing Failed</p>
-                      <p className="text-sm text-red-700 mt-1">{error}</p>
-                    </div>
-                  </div>
+                  <Card className="border-red-200 bg-red-50/50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-start space-x-3">
+                        <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+                        <div>
+                          <p className="font-medium text-red-800">Processing Failed</p>
+                          <p className="text-red-700 text-sm">{error}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )}
+
+                {/* Instructions */}
+                <Card className="border-blue-200 bg-blue-50/50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Info className="h-5 w-5" />
+                      Instructions for Best Results
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          Do:
+                        </h4>
+                        <ul className="text-sm space-y-1 pl-6">
+                          <li>• Include an AprilTag reference in the image</li>
+                          <li>• Ensure clear visibility of both eyes</li>
+                          <li>• Use good lighting conditions</li>
+                          <li>• Keep the face straight and centered</li>
+                        </ul>
+                      </div>
+                      <div className="space-y-2">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-amber-600" />
+                          Avoid:
+                        </h4>
+                        <ul className="text-sm space-y-1 pl-6">
+                          <li>• Blurry or low-quality images</li>
+                          <li>• Closed or partially visible eyes</li>
+                          <li>• Extreme head tilting or rotation</li>
+                          <li>• Poor lighting or shadows</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </CardContent>
             </Card>
+          </TabsContent>
 
-            {/* Enhanced Results Section */}
-            {processingResult && (
-              <Card className="shadow-lg border-0 bg-gradient-to-r from-green-50 to-blue-50">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2 text-xl">
-                    <CheckCircle className="h-6 w-6 text-green-600" />
-                    <span>Measurement Results</span>
-                  </CardTitle>
-                  <CardDescription>
-                    Your pupillary distance has been calculated successfully
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Main PD Result */}
-                  <div className="text-center py-6 bg-white rounded-lg shadow-sm">
-                    <div className="text-4xl font-bold text-slate-800 mb-2">
-                      {processingResult.result.pd_value}mm
-                    </div>
-                    <p className="text-lg text-slate-600">Pupillary Distance</p>
-                    <div className="flex justify-center space-x-4 mt-4 text-sm">
-                      {processingResult.measurement.leftMonocularPd && (
-                        <div>
-                          <Badge variant="secondary" className="mb-1">Left Monocular</Badge>
-                          <p className="font-medium">{processingResult.measurement.leftMonocularPd}mm</p>
-                        </div>
-                      )}
-                      {processingResult.measurement.rightMonocularPd && (
-                        <div>
-                          <Badge variant="secondary" className="mb-1">Right Monocular</Badge>
-                          <p className="font-medium">{processingResult.measurement.rightMonocularPd}mm</p>
-                        </div>
-                      )}
-                    </div>
+          {/* Results Tab */}
+          <TabsContent value="results" className="space-y-6">
+            {processingResult ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold">Your Measurement Results</h2>
+                    <p className="text-muted-foreground">Review and save your PD measurement</p>
                   </div>
-
-                  {/* Processed Image */}
-                  <div className="bg-white rounded-lg shadow-sm p-4">
-                    <h4 className="font-medium mb-3">Processed Image</h4>
-                    <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden">
-                      <img 
-                        src={`/api/images/${processingResult.result.processed_image_path.split('/').pop() || ''}`}
-                        alt="Processed measurement result"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Ocular Height Analysis */}
-                  <div className="bg-white rounded-lg shadow-sm p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="font-medium">Ocular Height Analysis</h4>
-                      {ocularHeightResult ? (
-                        <Badge className="bg-green-100 text-green-800">Complete</Badge>
-                      ) : (
-                        <Badge variant="outline">Optional</Badge>
-                      )}
-                    </div>
-
-                    {ocularHeightResult ? (
-                      <div className="grid grid-cols-2 gap-4 mb-4">
-                        <div className="text-center p-3 bg-blue-50 rounded-lg">
-                          <div className="text-2xl font-bold text-blue-600">
-                            {ocularHeightResult.ocularAnalysis.leftOcularHeight.toFixed(1)}mm
-                          </div>
-                          <p className="text-sm text-blue-700">Left Ocular Height</p>
-                        </div>
-                        <div className="text-center p-3 bg-purple-50 rounded-lg">
-                          <div className="text-2xl font-bold text-purple-600">
-                            {ocularHeightResult.ocularAnalysis.rightOcularHeight.toFixed(1)}mm
-                          </div>
-                          <p className="text-sm text-purple-700">Right Ocular Height</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-slate-600 mb-4">
-                        Measure the vertical distance from your pupils to your frame bottom line for precise lens fitting.
+                  <Button variant="outline" onClick={handleStartOver}>
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    Start Over
+                  </Button>
+                </div>
+                
+                <MeasurementResults 
+                  measurementData={processingResult}
+                  onSave={handleSaveComplete}
+                />
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <div className="space-y-4">
+                    <Target className="h-16 w-16 text-muted-foreground mx-auto" />
+                    <div>
+                      <h3 className="text-lg font-medium">No measurement data</h3>
+                      <p className="text-muted-foreground">
+                        Process an image in the Upload tab to see results here
                       </p>
-                    )}
-
-                    <div className="flex space-x-3">
-                      <Button
-                        variant="outline"
-                        onClick={handleAnalyzeOcularHeight}
-                        disabled={ocularHeightMutation.isPending}
-                        className="flex-1"
-                      >
-                        {ocularHeightMutation.isPending ? (
-                          <div className="flex items-center space-x-2">
-                            <div className="animate-spin h-3 w-3 border-b-2 border-current rounded-full" />
-                            <span>Analyzing...</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-2">
-                            <Zap className="h-4 w-4" />
-                            <span>AI Analysis</span>
-                          </div>
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={handleManualOcularHeight}
-                        className="flex-1"
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Manual Measurement
-                      </Button>
                     </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex space-x-3 pt-4">
-                    <Button onClick={handleNewMeasurement} className="flex-1">
+                    <Button onClick={() => setActiveTab("upload")}>
                       <Upload className="h-4 w-4 mr-2" />
-                      New Measurement
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setActiveTab("history")}
-                      className="flex-1"
-                    >
-                      <History className="h-4 w-4 mr-2" />
-                      View History
+                      Go to Upload
                     </Button>
                   </div>
                 </CardContent>
@@ -593,11 +331,17 @@ export default function EnhancedHome() {
             )}
           </TabsContent>
 
-          <TabsContent value="history">
-            <MeasurementHistory onBackToUpload={() => setActiveTab("upload")} />
+          {/* History Tab */}
+          <TabsContent value="history" className="space-y-6">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold">Measurement History</h2>
+              <p className="text-muted-foreground">View and manage your previous measurements</p>
+            </div>
+            
+            <MeasurementHistory />
           </TabsContent>
         </Tabs>
-      </main>
+      </div>
     </div>
   );
 }
