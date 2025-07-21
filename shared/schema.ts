@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, real, timestamp, uuid, decimal, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, real, timestamp, uuid, decimal } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -19,8 +19,6 @@ export const measurements = pgTable("measurements", {
   scaleFactor: decimal("scale_factor", { precision: 8, scale: 4 }).notNull(),
   originalImageUrl: text("original_image_url"),
   processedImageUrl: text("processed_image_url"),
-  imageUrl: text("image_url"),
-  isSaved: boolean("is_saved").default(false),
   leftOcularHeight: decimal("left_ocular_height", { precision: 5, scale: 2 }),
   rightOcularHeight: decimal("right_ocular_height", { precision: 5, scale: 2 }),
   ocularConfidence: decimal("ocular_confidence", { precision: 3, scale: 2 }),

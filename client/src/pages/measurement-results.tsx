@@ -375,10 +375,10 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {(measurement.image_url || measurement.processedImageUrl || measurement.processed_image_url) ? (
+          {(measurement.processedImageUrl || measurement.processed_image_url) ? (
             <div className="aspect-video bg-muted rounded-lg overflow-hidden">
               <img
-                src={measurement.image_url || `/api/images/${measurement.processedImageUrl || measurement.processed_image_url}`}
+                src={`/api/images/${measurement.processedImageUrl || measurement.processed_image_url}`}
                 alt="Processed measurement"
                 className="w-full h-full object-contain"
                 onError={(e) => {
