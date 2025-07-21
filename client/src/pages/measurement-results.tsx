@@ -381,6 +381,10 @@ export default function MeasurementResults({ measurementData, onSave }: Measurem
                 src={`/api/images/${measurement.processedImageUrl || measurement.processed_image_url}`}
                 alt="Processed measurement"
                 className="w-full h-full object-contain"
+                onError={(e) => {
+                  console.error('Image failed to load:', e);
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
               />
             </div>
           ) : (

@@ -1,34 +1,14 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileUpload } from "@/components/ui/file-upload";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { FileUpload } from "@/components/ui/file-upload";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import MeasurementResults from "./measurement-results";
-import { MeasurementHistory } from "./measurement-history";
-import { 
-  Eye, 
-  Info, 
-  Shield, 
-  CheckCircle, 
-  AlertTriangle, 
-  Ruler, 
-  RotateCcw,
-  Save,
-  FileText,
-  Edit,
-  LogOut,
-  User,
-  Upload,
-  History,
-  Target,
-  Zap
-} from "lucide-react";
+import MeasurementResults from "@/pages/measurement-results";
+import { Upload, RotateCcw, Target, LogOut, User } from "lucide-react";
 import type { Measurement } from "@shared/schema";
 
 interface ProcessingResult {
@@ -56,7 +36,7 @@ export default function EnhancedHome() {
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('image', file);
-      
+
       const response = await apiRequest("POST", "/api/measurements", formData);
       return response.json();
     },
@@ -175,7 +155,7 @@ export default function EnhancedHome() {
               <CardContent className="space-y-6">
                 {/* Upload Area */}
                 <FileUpload onFileSelect={handleFileSelect} />
-                
+
                 {/* Selected File Display */}
                 {selectedFile && (
                   <Card className="border-green-200 bg-green-50/50">
@@ -304,7 +284,7 @@ export default function EnhancedHome() {
                     Start Over
                   </Button>
                 </div>
-                
+
                 <MeasurementResults 
                   measurementData={processingResult}
                   onSave={handleSaveComplete}
@@ -337,7 +317,7 @@ export default function EnhancedHome() {
               <h2 className="text-2xl font-bold">Measurement History</h2>
               <p className="text-muted-foreground">View and manage your previous measurements</p>
             </div>
-            
+
             <MeasurementHistory />
           </TabsContent>
         </Tabs>

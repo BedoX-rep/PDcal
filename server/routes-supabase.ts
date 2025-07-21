@@ -84,25 +84,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Upload processed image to Supabase storage
           let processedImageUrl = null;
           if (result.processed_image_path && fs.existsSync(result.processed_image_path)) {
-            const imageBuffer = fs.readFileSync(result.processed_image_path);
-            const fileName = `${user.id}/${Date.now()}_processed.jpg`;
-            
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('measurement-images')
-              .upload(fileName, imageBuffer, {
-                contentType: 'image/jpeg',
-                upsert: false
-              });
-            
-            if (uploadError) {
-              console.error('Image upload error:', uploadError);
-            } else {
-              processedImageUrl = uploadData.path;
-              console.log('Image uploaded successfully:', processedImageUrl);
+            try {
+              const imageBuffer = fs.readFileSync(result.processed_image_path);
+              const fileName = `${user.id}/${Date.now()}_processed.jpg`;
+              
+              const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+                .from('measurement-images')
+                .upload(fileName, imageBuffer, {
+                  contentType: 'image/jpeg',
+                  upsert: false
+                });
+              
+              if (uploadError) {
+                console.error('Image upload error:', uploadError);
+                // Store local path as fallback
+                processedImageUrl = result.processed_image_path.replace(process.cwd() + '/', '');
+              } else {
+                processedImageUrl = uploadData.path;
+                console.log('Image uploaded successfully:', processedImageUrl);
+                // Clean up local processed image after successful upload
+                fs.unlinkSync(result.processed_image_path);
+              }
+            } catch (imageError) {
+              console.error('Image processing error:', imageError);
+              // Store local path as fallback
+              processedImageUrl = result.processed_image_path.replace(process.cwd() + '/', '');
             }
-            
-            // Clean up local processed image
-            fs.unlinkSync(result.processed_image_path);
           }
 
           // Save to Supabase with user authentication context

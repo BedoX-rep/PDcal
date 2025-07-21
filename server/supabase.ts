@@ -2,18 +2,23 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-// Create a server-side Supabase client with anon key
-export const supabaseAdmin = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
+// Create a server-side Supabase client with service role key for admin operations
+export const supabaseAdmin = createClient(
+  supabaseUrl, 
+  supabaseServiceKey || supabaseAnonKey, 
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
   }
-})
+)
 
 // Create authenticated client for user operations
 export function createAuthenticatedClient(accessToken: string) {
