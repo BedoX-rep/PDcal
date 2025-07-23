@@ -149,56 +149,66 @@ def detect_face_landmarks(image):
 def detect_apriltags(image):
     """Detect AprilTags using the proper pupil-apriltags library"""
     
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Process in smaller resolution to avoid memory issues
-    h, w = gray.shape
-    if max(h, w) > 512:
-        scale = 512 / max(h, w)
-        new_w = int(w * scale)
-        new_h = int(h * scale)
-        gray_small = cv2.resize(gray, (new_w, new_h))
-        scale_back = max(h, w) / 512
-    else:
-        gray_small = gray
-        scale_back = 1.0
-    
-    # Try AprilTag families one by one to reduce memory usage
-    tag_families = ['tag25h9', 'tag36h11', 'tag16h5']  # Most common families first
-    
-    best_tag = None
-    best_confidence = 0
-    
-    for family in tag_families:
-        try:
-            # Create detector for this family only
-            detector = Detector(families=family)
-            tags = detector.detect(gray_small, estimate_tag_pose=False, camera_params=None, tag_size=None)
-            
-            for tag in tags:
-                # Scale coordinates back if we resized
-                if scale_back != 1.0:
-                    tag.corners = tag.corners * scale_back
-                    tag.center = tag.center * scale_back
+    try:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Process in smaller resolution to avoid memory issues
+        h, w = gray.shape
+        if max(h, w) > 512:
+            scale = 512 / max(h, w)
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            gray_small = cv2.resize(gray, (new_w, new_h))
+            scale_back = max(h, w) / 512
+        else:
+            gray_small = gray
+            scale_back = 1.0
+        
+        # Try AprilTag families one by one to reduce memory usage
+        tag_families = ['tag25h9', 'tag36h11', 'tag16h5']  # Most common families first
+        
+        best_tag = None
+        best_confidence = 0
+        
+        for family in tag_families:
+            detector = None
+            try:
+                # Create detector for this family only
+                detector = Detector(families=family)
+                tags = detector.detect(gray_small, estimate_tag_pose=False, camera_params=None, tag_size=None)
                 
-                # Accept tags with reasonable confidence (lowered threshold)
-                if tag.decision_margin > best_confidence and tag.decision_margin > 5.0:
-                    best_tag = tag
-                    best_confidence = tag.decision_margin
-                    print(f"Found {family} tag with confidence {tag.decision_margin}", file=sys.stderr)
-            
-            # Clean up detector to free memory
-            del detector
-            
-            # If we found a good tag, stop searching
-            if best_tag and best_confidence > 20.0:
-                break
+                for tag in tags:
+                    # Scale coordinates back if we resized
+                    if scale_back != 1.0:
+                        tag.corners = tag.corners * scale_back
+                        tag.center = tag.center * scale_back
+                    
+                    # Accept tags with reasonable confidence (lowered threshold)
+                    if tag.decision_margin > best_confidence and tag.decision_margin > 5.0:
+                        best_tag = tag
+                        best_confidence = tag.decision_margin
+                        print(f"Found {family} tag with confidence {tag.decision_margin}", file=sys.stderr)
                 
-        except Exception as e:
-            print(f"Error with {family}: {e}", file=sys.stderr)
-            continue
-    
-    return best_tag
+                # If we found a good tag, stop searching
+                if best_tag and best_confidence > 20.0:
+                    break
+                    
+            except Exception as e:
+                print(f"Error with {family}: {e}", file=sys.stderr)
+                continue
+            finally:
+                # Always clean up detector to free memory
+                if detector is not None:
+                    try:
+                        del detector
+                    except:
+                        pass
+        
+        return best_tag
+        
+    except Exception as e:
+        print(f"AprilTag detection failed: {e}", file=sys.stderr)
+        return None
 
 def process_image(image_path):
     """Process image to detect pupils and AprilTag, calculate PD"""
@@ -514,12 +524,16 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
+    print(f"Python script started with mode: {args.mode}", file=sys.stderr)
+    
     if args.mode == 'framesize':
         if args.left_line is None or args.right_line is None or args.frame_width is None:
             print(json.dumps({"success": False, "error": "Frame size mode requires --left-line, --right-line, and --frame-width parameters"}))
             sys.exit(1)
+        print(f"Using frame size analysis: left={args.left_line}, right={args.right_line}, width={args.frame_width}", file=sys.stderr)
         result = process_image_framesize(args.image_path, args.left_line, args.right_line, args.frame_width)
     else:
+        print("Using AprilTag analysis", file=sys.stderr)
         result = process_image(args.image_path)
     
     print(json.dumps(result))

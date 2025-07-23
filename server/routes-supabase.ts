@@ -70,6 +70,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Call Python script for image processing
+      console.log('Python script args:', pythonArgs);
       const pythonProcess = spawn('python3', pythonArgs);
 
       let pythonOutput = '';
