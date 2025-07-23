@@ -44,12 +44,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const imagePath = req.file.path;
+      const analysisMode = req.body.analysisMode || 'apriltag';
 
-      // Call Python script for image processing
-      const pythonProcess = spawn('python3', [
+      // Prepare Python script arguments based on analysis mode
+      let pythonArgs = [
         path.join(process.cwd(), 'server/python/pd_processor_final.py'),
         imagePath
-      ]);
+      ];
+
+      if (analysisMode === 'framesize') {
+        const leftLineX = parseFloat(req.body.leftLineX);
+        const rightLineX = parseFloat(req.body.rightLineX);
+        const frameWidth = parseFloat(req.body.frameWidth);
+
+        if (isNaN(leftLineX) || isNaN(rightLineX) || isNaN(frameWidth)) {
+          return res.status(400).json({ error: "Invalid frame size parameters" });
+        }
+
+        pythonArgs.push('--mode', 'framesize');
+        pythonArgs.push('--left-line', leftLineX.toString());
+        pythonArgs.push('--right-line', rightLineX.toString());
+        pythonArgs.push('--frame-width', frameWidth.toString());
+      } else {
+        pythonArgs.push('--mode', 'apriltag');
+      }
+
+      // Call Python script for image processing
+      const pythonProcess = spawn('python3', pythonArgs);
 
       let pythonOutput = '';
       let pythonError = '';

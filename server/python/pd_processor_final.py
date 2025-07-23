@@ -8,6 +8,7 @@ import numpy as np
 import json
 import sys
 import os
+import argparse
 import mediapipe as mp
 from pupil_apriltags import Detector
 
@@ -374,11 +375,151 @@ def process_image(image_path):
             "pupils_detected": False
         }
 
+def process_image_framesize(image_path, left_line_x, right_line_x, frame_width_mm):
+    """Process image using frame size analysis"""
+    try:
+        # Load image
+        image = cv2.imread(image_path)
+        if image is None:
+            return {"success": False, "error": "Could not load image"}
+            
+        print(f"Processing with frame size analysis: left={left_line_x}, right={right_line_x}, width={frame_width_mm}mm", file=sys.stderr)
+        
+        # Detect pupils using the same method as AprilTag analysis
+        left_eye, right_eye, nose_bridge = detect_face_landmarks(image)
+        
+        if left_eye is None or right_eye is None:
+            return {"success": False, "error": "Could not detect pupils"}
+        
+        print(f"Detected pupils - Left: {left_eye}, Right: {right_eye}", file=sys.stderr)
+        
+        # Calculate pixel distance between pupils
+        pixel_distance = np.sqrt((right_eye[0] - left_eye[0])**2 + (right_eye[1] - left_eye[1])**2)
+        
+        # Calculate frame pixel width and scale factor
+        frame_pixel_width = abs(right_line_x - left_line_x)
+        pixel_scale_factor = frame_width_mm / frame_pixel_width  # mm per pixel
+        
+        print(f"Frame width: {frame_pixel_width} pixels = {frame_width_mm}mm", file=sys.stderr)
+        print(f"Scale factor: {pixel_scale_factor:.3f} mm/pixel", file=sys.stderr)
+        
+        # Calculate PD in millimeters
+        pd_mm = pixel_distance * pixel_scale_factor
+        
+        # Calculate monocular PDs using nose bridge as reference
+        left_monocular_px = abs(left_eye[0] - nose_bridge[0])
+        right_monocular_px = abs(right_eye[0] - nose_bridge[0])
+        left_monocular_pd_mm = left_monocular_px * pixel_scale_factor
+        right_monocular_pd_mm = right_monocular_px * pixel_scale_factor
+        
+        print(f"Measurements - PD: {pd_mm:.1f}mm, Left mono: {left_monocular_pd_mm:.1f}mm, Right mono: {right_monocular_pd_mm:.1f}mm", file=sys.stderr)
+        
+        # Create processed image with frame size annotations
+        processed_image = image.copy()
+        
+        # Ensure coordinates are integers
+        left_eye = (int(left_eye[0]), int(left_eye[1]))
+        right_eye = (int(right_eye[0]), int(right_eye[1]))
+        nose_bridge = (int(nose_bridge[0]), int(nose_bridge[1]))
+        
+        # Draw pupil markers
+        cv2.circle(processed_image, left_eye, 2, (0, 255, 0), 1)
+        cv2.circle(processed_image, right_eye, 2, (0, 255, 0), 1)
+        cv2.circle(processed_image, nose_bridge, 3, (255, 0, 255), 2)
+        
+        # Draw line between pupils
+        cv2.line(processed_image, left_eye, right_eye, (0, 255, 0), 3)
+        
+        # Draw monocular PD lines
+        cv2.line(processed_image, (nose_bridge[0], left_eye[1]), left_eye, (0, 255, 255), 2)
+        cv2.line(processed_image, (nose_bridge[0], right_eye[1]), right_eye, (0, 255, 255), 2)
+        
+        # Draw red vertical line through nose bridge center
+        image_height = processed_image.shape[0]
+        cv2.line(processed_image, (nose_bridge[0], 0), (nose_bridge[0], image_height), (0, 0, 255), 2)
+        
+        # Draw frame reference lines
+        left_line_int = int(left_line_x)
+        right_line_int = int(right_line_x)
+        cv2.line(processed_image, (left_line_int, 0), (left_line_int, image_height), (255, 0, 0), 3)  # Blue for left frame edge
+        cv2.line(processed_image, (right_line_int, 0), (right_line_int, image_height), (255, 0, 0), 3)  # Blue for right frame edge
+        
+        # Draw horizontal line between frame edges
+        mid_y = image_height // 6
+        cv2.line(processed_image, (left_line_int, mid_y), (right_line_int, mid_y), (255, 0, 0), 4)
+        
+        # Add text annotations
+        cv2.putText(processed_image, f"PD: {pd_mm:.1f}mm", 
+                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(processed_image, f"Left monocular PD: {left_monocular_pd_mm:.1f}mm", 
+                   (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        cv2.putText(processed_image, f"Right monocular PD: {right_monocular_pd_mm:.1f}mm", 
+                   (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        cv2.putText(processed_image, f"Frame Size Analysis ({frame_width_mm}mm)", 
+                   (10, 115), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+        cv2.putText(processed_image, "Eyes Detected", 
+                   (10, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.putText(processed_image, f"Scale: {pixel_scale_factor:.3f}mm/px", 
+                   (10, 165), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        
+        # Save processed image
+        processed_dir = "server/processed_images"
+        os.makedirs(processed_dir, exist_ok=True)
+        
+        base_name = os.path.splitext(os.path.basename(image_path))[0]
+        processed_filename = f"{base_name}_processed.jpg"
+        processed_path = os.path.join(processed_dir, processed_filename)
+        
+        cv2.imwrite(processed_path, processed_image)
+        
+        # Validate and ensure integer coordinates
+        left_eye_coords = (int(round(left_eye[0])), int(round(left_eye[1])))
+        right_eye_coords = (int(round(right_eye[0])), int(round(right_eye[1])))
+        nose_bridge_coords = (int(round(nose_bridge[0])), int(round(nose_bridge[1])))
+        
+        return {
+            "success": True,
+            "pd_value": round(pd_mm, 1),
+            "left_pupil": {"x": left_eye_coords[0], "y": left_eye_coords[1]},
+            "right_pupil": {"x": right_eye_coords[0], "y": right_eye_coords[1]},
+            "nose_bridge": {"x": nose_bridge_coords[0], "y": nose_bridge_coords[1]},
+            "left_monocular_pd": round(left_monocular_pd_mm, 1),
+            "right_monocular_pd": round(right_monocular_pd_mm, 1),
+            "pixel_distance": round(float(pixel_distance), 1),
+            "scale_factor": round(pixel_scale_factor, 3),
+            "processed_image_path": processed_path,
+            "apriltag_detected": False,
+            "pupils_detected": True,
+            "frame_analysis": True,
+            "frame_width_mm": frame_width_mm,
+            "frame_pixel_width": round(frame_pixel_width, 1)
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Frame size processing error: {str(e)}",
+            "apriltag_detected": False,
+            "pupils_detected": False
+        }
+
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(json.dumps({"success": False, "error": "Usage: python pd_processor_final.py <image_path>"}))
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='Process image for pupillary distance measurement')
+    parser.add_argument('image_path', help='Path to the image file')
+    parser.add_argument('--mode', choices=['apriltag', 'framesize'], default='apriltag', 
+                       help='Analysis mode: apriltag or framesize')
+    parser.add_argument('--left-line', type=float, help='Left frame edge X coordinate (for framesize mode)')
+    parser.add_argument('--right-line', type=float, help='Right frame edge X coordinate (for framesize mode)')
+    parser.add_argument('--frame-width', type=float, help='Frame width in mm (for framesize mode)')
     
-    image_path = sys.argv[1]
-    result = process_image(image_path)
+    args = parser.parse_args()
+    
+    if args.mode == 'framesize':
+        if args.left_line is None or args.right_line is None or args.frame_width is None:
+            print(json.dumps({"success": False, "error": "Frame size mode requires --left-line, --right-line, and --frame-width parameters"}))
+            sys.exit(1)
+        result = process_image_framesize(args.image_path, args.left_line, args.right_line, args.frame_width)
+    else:
+        result = process_image(args.image_path)
+    
     print(json.dumps(result))

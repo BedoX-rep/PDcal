@@ -4,7 +4,16 @@
 
 This is a full-stack web application designed to measure pupillary distance (PD) from uploaded images using computer vision. The application combines a React frontend with an Express.js backend, utilizing Python-based image processing with OpenCV Haar cascades and robust AprilTag pattern detection for accurate measurements.
 
-## Recent Changes (July 21, 2025)
+## Recent Changes (July 23, 2025)
+
+✓ **Frame Size Analysis Mode** - Added alternative analysis method where users draw vertical lines on frame edges and input frame width for scale calculation
+✓ **Analysis Mode Selection** - Users now choose between AprilTag analysis (automatic) or Frame Size analysis (manual) after uploading images
+✓ **Interactive Frame Size Editor** - Canvas-based editor with zoom, pan, and precise vertical line placement for frame edge detection
+✓ **Dual Processing Backend** - Python script supports both AprilTag detection and frame size scaling with command-line arguments
+✓ **Enhanced Measurement Display** - Results show analysis method used (AprilTag vs Frame Size) with appropriate visual indicators
+✓ **Improved User Flow** - Streamlined upload → analysis selection → processing → results workflow
+
+## Previous Changes (July 21, 2025)
 
 ✓ **Complete System Migration** - Successfully migrated from Replit Agent to Replit environment with enhanced features
 ✓ **Supabase Authentication** - Full authentication system with secure sign-in/sign-up and protected routes
